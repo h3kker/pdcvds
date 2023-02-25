@@ -2,13 +2,13 @@
 
 use v5.36;
 
-use Path::Tiny;
+use Mojo::File;
 use Mojo::UserAgent;
 use Mojo::JSON qw(encode_json);
 
 my $ua = Mojo::UserAgent->new;
 
-my $pw = path('.pw')->slurp;
+my $pw = Mojo::File->new('.pw')->slurp;
 chomp $pw;
 
 my $res = $ua->max_redirects(2)->post('https://www.pdcvds.com/savelogin.php' => form => { 
