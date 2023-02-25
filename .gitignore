@@ -1,4 +1,4 @@
-*.json
+startlist-*.json
 *.sw[op]
 .pw
 pdcvds.html
