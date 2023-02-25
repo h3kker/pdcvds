@@ -17,7 +17,8 @@ my @subs = ('result/overview', 'gc/overview');
 my $ov_res;
 for my $sub (@subs) {
   my $overview_url = $start_url;
-  $overview_url =~ s,startlist$,$sub,;
+  $overview_url =~ s,(result/)?startlist$,$sub,;
+  say $overview_url;
   $ov_res = $ua->get($overview_url)->result;
   die 'Unable to fetch: '.$ov_res->code
     unless $ov_res->is_success;
