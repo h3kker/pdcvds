@@ -4,9 +4,14 @@ library(jsonlite)
 library(lubridate)
 library(knitr)
 
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 load_race <- function(fn) {
     ll <- fromJSON(fn)
-    bind_cols(ll$riders, race = ll$race, date = ymd(ll$start_date))
+    bind_cols(ll$riders,
+        race = ll$race,
+        start_date = ymd(ll$start_date),
+        end_date = ymd(ll$end_date)
+    )
 }
 ```
 
@@ -17,10 +22,12 @@ team <- fromJSON("team.json") %>%
 races <- do.call(bind_rows, lapply(Sys.glob("race-*.json"), load_race))
 ```
 
+## Upcoming
+
 ```{r upcoming}
 inner_join(team, races) %>% 
-    filter(date >= today()) %>%
-    select(date, race, name, team, price) %>%
-    arrange(date, race, desc(price)) %>%
+    filter(end_date >= today()) %>%
+    select(start_date, race, name, team, price) %>%
+    arrange(start_date, race, desc(price)) %>%
     kable()
 ```
