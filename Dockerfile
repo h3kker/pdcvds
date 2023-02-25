@@ -12,8 +12,15 @@ RUN apt update && \
     r-cran-ggplot2 \
     r-cran-rmarkdown
 
+RUN apt install -y locales && \
+    sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen
+ENV LC_ALL en_US.UTF-8
+
 COPY team.json race-info.pl pdcvds.Rmd render.sh /srv/
 COPY lib /srv/lib/
 WORKDIR /srv
+
+
 
 CMD [ "./render.sh" ]
