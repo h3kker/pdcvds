@@ -1,5 +1,49 @@
 [
   {
+    "age": "30.7",
+    "cat": "WT",
+    "country": "FRA",
+    "name": "Julian Alaphilippe",
+    "previous": "502",
+    "price": "14",
+    "score": "250",
+    "team": "Soudal - Quick Step",
+    "team_short": "SOQ"
+  },
+  {
+    "age": "22.4",
+    "cat": "WT",
+    "country": "DEN",
+    "name": "Mattias Skjelmose Jensen",
+    "previous": "975",
+    "price": "10",
+    "score": "180",
+    "team": "Trek - Segafredo",
+    "team_short": "TFS"
+  },
+  {
+    "age": "20.1",
+    "cat": "WT",
+    "country": "FRA",
+    "name": "Romain Grégoire",
+    "previous": "0",
+    "price": "1",
+    "score": "140",
+    "team": "Groupama - FDJ",
+    "team_short": "GFC"
+  },
+  {
+    "age": "34.6",
+    "cat": "PROF",
+    "country": "BEL",
+    "name": "Sep Vanmarcke",
+    "previous": "165",
+    "price": "2",
+    "score": "70",
+    "team": "Israel - Premier Tech",
+    "team_short": "IPT"
+  },
+  {
     "age": "23.6",
     "cat": "WT",
     "country": "NED",
@@ -66,17 +110,6 @@
     "team_short": "UAD"
   },
   {
-    "age": "22.4",
-    "cat": "WT",
-    "country": "DEN",
-    "name": "Mattias Skjelmose Jensen",
-    "previous": "975",
-    "price": "10",
-    "score": "0",
-    "team": "Trek - Segafredo",
-    "team_short": "TFS"
-  },
-  {
     "age": "30.9",
     "cat": "WT",
     "country": "BEL",
@@ -86,17 +119,6 @@
     "score": "0",
     "team": "Trek - Segafredo",
     "team_short": "TFS"
-  },
-  {
-    "age": "30.7",
-    "cat": "WT",
-    "country": "FRA",
-    "name": "Julian Alaphilippe",
-    "previous": "502",
-    "price": "14",
-    "score": "0",
-    "team": "Soudal - Quick Step",
-    "team_short": "SOQ"
   },
   {
     "age": "23.5",
@@ -141,17 +163,6 @@
     "score": "0",
     "team": "Alpecin-Deceuninck",
     "team_short": "ADC"
-  },
-  {
-    "age": "34.6",
-    "cat": "PROF",
-    "country": "BEL",
-    "name": "Sep Vanmarcke",
-    "previous": "165",
-    "price": "2",
-    "score": "0",
-    "team": "Israel - Premier Tech",
-    "team_short": "IPT"
   },
   {
     "age": "19.7",
@@ -229,17 +240,6 @@
     "score": "0",
     "team": "Trek - Segafredo",
     "team_short": "TFS"
-  },
-  {
-    "age": "20.1",
-    "cat": "WT",
-    "country": "FRA",
-    "name": "Romain Grégoire",
-    "previous": "0",
-    "price": "1",
-    "score": "0",
-    "team": "Groupama - FDJ",
-    "team_short": "GFC"
   },
   {
     "age": "20.9",
