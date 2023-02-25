@@ -1,0 +1,26 @@
+```{r setup, include=FALSE}
+library(dplyr)
+library(jsonlite)
+library(lubridate)
+library(knitr)
+
+load_race <- function(fn) {
+    ll <- fromJSON(fn)
+    bind_cols(ll$riders, race = ll$race, date = ymd(ll$start_date))
+}
+```
+
+```{r load}
+team <- fromJSON("team.json") %>%
+    mutate(price=as.numeric(price))
+
+races <- do.call(bind_rows, lapply(Sys.glob("race-*.json"), load_race))
+```
+
+```{r upcoming}
+inner_join(team, races) %>% 
+    filter(date >= today()) %>%
+    select(date, race, name, team, price) %>%
+    arrange(date, race, desc(price)) %>%
+    kable()
+```
