@@ -1,0 +1,45 @@
+---
+title: VDS Upcoming Races
+author: hekker
+output:
+  html_document:
+    toc: true
+    theme: spacelab
+date: "`r format(Sys.time())`"
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(jsonlite)
+library(lubridate)
+library(knitr)
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+load_race <- function(fn) {
+    ll <- fromJSON(fn)
+    bind_cols(ll$riders,
+        race = ll$race,
+        start_date = ymd(ll$start_date),
+        end_date = ymd(ll$end_date)
+    )
+}
+```
+
+```{r load}
+team <- fromJSON("team.json") %>%
+    mutate(price=as.numeric(price))
+
+races <- do.call(bind_rows, lapply(Sys.glob("startlist-*.json"), load_race))
+```
+
+[My Team](https://www.pdcvds.com/myteam.php?mw=1&y=2023)
+
+## Upcoming
+
+```{r upcoming}
+inner_join(team, races) %>% 
+    filter(end_date >= today()) %>%
+    select(start_date, race, name, team, price) %>%
+    arrange(start_date, race, desc(price)) %>%
+    kable()
+```
