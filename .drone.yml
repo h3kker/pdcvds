@@ -1,0 +1,37 @@
+---
+name: pdcvds
+kind: pipeline
+
+steps:
+- name: bauhaus
+  image: docker:dind
+  volumes:
+  - name: dockersock
+    path: /var/run/docker.sock
+  commands:
+  - >
+    docker build
+    --label org.label-schema.build-date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+    --label org.label-schema.vcs-url="$DRONE_GIT_HTTP_URL"
+    --label org.label-schema.vcs-ref="$DRONE_COMMIT_SHA"
+    --label at.ac.vcf.ngs.blame="$DRONE_COMMIT_AUTHOR"
+    -t ghcr.io/h3kker/pdcvds .
+- name: pushraus
+  image: docker:dind
+  depends_on:
+  - bauhaus
+  volumes:
+  - name: dockersock
+    path: /var/run/docker.sock
+  environment:
+    DOCKER_PASS:
+      from_secret: ghcr
+    DOCKER_USERNAME:
+      from_secret: ghcr-username
+  commands:
+    - echo "$DOCKER_PASS" | docker login --username $DOCKER_USERNAME --password-stdin ghcr.io
+    - docker push ghcr.io/h3kker/pdcvds
+volumes:
+- name: dockersock
+  host:
+    path: /var/run/docker.sock
