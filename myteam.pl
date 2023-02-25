@@ -8,7 +8,9 @@ use Mojo::JSON qw(encode_json);
 
 my $ua = Mojo::UserAgent->new;
 
-my $pw = Mojo::File->new('.pw')->slurp;
+my $pw = `bw get password pdcvds.com`;
+die 'Could not get password'
+  if $? || !$pw;
 chomp $pw;
 
 my $res = $ua->max_redirects(2)->post('https://www.pdcvds.com/savelogin.php' => form => { 
