@@ -95,7 +95,7 @@ sub startlist($self, $start_url) {
         });
     })->flatten;
 
-    Mojo::File->new("startlist-".$start_date."-".slugify($race).".json")->spurt(
+    Mojo::File->new("data/startlist-".$start_date."-".slugify($race).".json")->spurt(
         encode_json({
             race => $race,
             start_date => $start_date,
