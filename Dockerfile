@@ -17,7 +17,7 @@ RUN apt install -y locales && \
     locale-gen
 ENV LC_ALL en_US.UTF-8
 
-RUN curl -Lo /tmp/bw.zip https://vault.bitwarden.com/download/?app=cli&platform=linux && \
+RUN curl -Lo /tmp/bw.zip 'https://vault.bitwarden.com/download/?app=cli&platform=linux' && \
     unzip /tmp/bw.zip && \
     mv bw /usr/local/bin && \
     rm /tmp/bw.zip
