@@ -17,7 +17,12 @@ RUN apt install -y locales && \
     locale-gen
 ENV LC_ALL en_US.UTF-8
 
-COPY team.json race-info.pl pdcvds.Rmd render.sh /srv/
+RUN curl -Lo /tmp/bw.zip https://vault.bitwarden.com/download/?app=cli&platform=linux && \
+    unzip /tmp/bw.zip && \
+    mv bw /usr/local/bin && \
+    rm /tmp/bw.zip
+
+COPY race-info.pl pdcvds.Rmd render.sh /srv/
 COPY lib /srv/lib/
 WORKDIR /srv
 
