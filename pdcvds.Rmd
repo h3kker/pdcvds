@@ -59,7 +59,7 @@ team$standings %>%
     kable()
 ```
 
-```{r ranking_hist}
+```{r ranking_hist, fig.width=10}
 team$standings %>%
     ggplot(aes(x = date, y = position)) +
     geom_step() +
