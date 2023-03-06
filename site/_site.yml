@@ -1,5 +1,4 @@
 name: 'pdc-vds'
-output_dir: "../out"
 theme: spacelab
 navbar:
   title: "PDC VDS"
