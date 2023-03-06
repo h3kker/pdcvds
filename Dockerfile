@@ -10,7 +10,8 @@ RUN apt update && \
     r-cran-jsonlite \
     r-cran-lubridate \
     r-cran-ggplot2 \
-    r-cran-rmarkdown
+    r-cran-rmarkdown \
+    r-cran-dt
 
 RUN apt install -y locales && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
