@@ -1,7 +1,8 @@
 FROM perl:5.36
 
-RUN cpanm -i Mojolicious \
+RUN cpanm --notest -i Mojolicious \
     DateTime \
+    DateTime::Format::Strptime \
     Moose
 
 RUN apt update && \
