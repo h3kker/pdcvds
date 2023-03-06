@@ -29,7 +29,8 @@ team <- load_team("../data/team-2023.json")
 
 ```{r current_table}
 team$riders %>%
-    select(name, country, team, cat, age, price, score, previous) %>%
+    select(name, country, team, cat, age, price, score, previous, pdc_teams) %>%
+    arrange(desc(score), desc(price)) %>%
     datatable(
         options = list(
             pageLength = 25,
@@ -38,13 +39,33 @@ team$riders %>%
     )
 ```
 
-```{r score_dev, fig.width=14}
-team$scores %>%
+```{r score_dev, fig.width=14, fig.height=9}
+tmp_cumtable <- team$results %>%
+    left_join(
+        team$riders %>% select(pid, name)
+    ) %>%
+    group_by(name) %>%
+    arrange(date) %>%
+    mutate(score = cumsum(points))
+
+tmp_lastscore <- tmp_cumtable %>%
+    group_by(name) %>%
+    slice_max(n = 1, order_by = date) %>%
+    mutate(date = now())
+
+tmp_init <- tmp_cumtable %>%
+    group_by(name) %>%
+    summarise(
+        date = ymd_hms("2023-02-20 00:00:00"),
+        score = 0
+    )
+
+
+bind_rows(tmp_init, tmp_cumtable, tmp_lastscore) %>%
     ggplot(aes(x = date, y = score)) +
         geom_step(aes(color = name)) +
-        geom_label(data = team$scores %>%
-                group_by(name) %>%
-                slice_max(n = 1, order_by = date),
+        geom_point() +
+        geom_label(data = tmp_lastscore,
             aes(x = date, y = score, label = name),
             hjust = "right") +
         theme(legend.position = "none")
@@ -63,5 +84,27 @@ team$standings %>%
 team$standings %>%
     ggplot(aes(x = date, y = position)) +
     geom_step() +
-    ylim(0, 813)
+    ylim(813, 0)
+```
+
+## Races
+
+```{r race_table}
+team$results %>%
+    group_by(race) %>%
+    summarise(date = min(date), score = sum(points), count = n()) %>%
+    arrange(desc(score)) %>%
+    kable()
+```
+
+```{r race_cumsum, fig.width=14, fig.height=9}
+team$results %>%
+    group_by(race) %>%
+    summarise(date = min(date), score = sum(points), count = n()) %>%
+    arrange(date) %>%
+    mutate(score = cumsum(score)) %>%
+    ggplot(aes(x = date, y = score)) +
+        geom_step() +
+        geom_point(aes(size = count)) +
+        geom_label(aes(label = race), hjust = "right", nudge_x = -10000)
 ```

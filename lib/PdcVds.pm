@@ -5,7 +5,10 @@ use v5.36;
 use Mojo::File;
 use Mojo::UserAgent;
 use Mojo::JSON qw(decode_json encode_json);
+use Mojo::URL;
+use Mojo::Promise;
 use DateTime;
+use DateTime::Format::Strptime;
 
 use feature 'try';
 use Moose;
@@ -58,6 +61,7 @@ sub _read_current($self) {
 sub login($self) {
     return 1
         if $self->is_logged_in;
+    say "login...";
     my $pw = `bw get password pdcvds.com`;
     die 'Could not get password'
     if $? || !$pw;
@@ -91,6 +95,7 @@ sub _map_team($self, $team) {
 
 sub get_riders($self) {
     $self->login;
+    say "get team...";
     my $res = $self->ua->get($self->base_url.'/myteam.php?mw=1&y=2023')->result;
     die 'Could not fetch team: '.$res->code
         unless $res->is_success;
@@ -98,44 +103,117 @@ sub get_riders($self) {
     my $now = DateTime->now;
 
     my @riders;
-    my @scores = ($self->current_team->{scores} // [])->@*;
+    my @results;
 
     my $page = $res->dom;
-    my $rows = $page->at('div[id="content"] table')->children('tr');
+    my $rows = $page->at('div#content table')->children('tr');
+    my @info_promises;
     $rows->tail(-1)->head(-1)->each(sub($row, $n) {
         my $cols = $row->children('td')->to_array;
         my $team = $cols->[2]->at('a')->attr('title');
         $team = $self->_map_team($team);
-        push @riders, {
+        my $rider_url = Mojo::URL->new($cols->[4]->at('a')->attr('href'));
+        my $rider_id = $rider_url->query->param('pid');
+        my $base_info = {
+            pid => $rider_id,
             country => $cols->[1]->at('img')->attr('alt'),
             team_short => $cols->[2]->at('a')->text,
             team => $team,
             cat => $cols->[3]->all_text,
             name => $cols->[4]->at('a')->text,
             age => $cols->[5]->text,
-            price => $cols->[6]->at('a')->text,
-            previous => $cols->[7]->text,
-            score => $cols->[8]->text,
+            price => $cols->[6]->at('a')->text+0,
+            previous => $cols->[7]->text+0,
+            score => $cols->[8]->text+0,
         };
-        push @scores, {
-            name => $cols->[4]->at('a')->text,
-            date => $now->iso8601,
-            score => $cols->[8]->text,
-        };
+        my $p = $self->get_rider_info($rider_id);
+        $p->then(sub($info) {
+            say "got rider info for ".$base_info->{name};
+            $base_info->{pdc_teams} = $info->{teams};
+            push @riders, $base_info;
+
+            push @results, $info->{results}->@*;
+        });
+        push @info_promises, $p;
     });
+    Mojo::Promise->all(@info_promises)->wait;
     $self->current_team->{riders} = \@riders;
-    $self->current_team->{scores} = \@scores;
+    $self->current_team->{results} = \@results;
     \@riders;
+}
+
+sub get_rider_info($self, $pid) {
+    say "get info for ".$pid;
+    my $year = '2023';
+    my $date_parser = DateTime::Format::Strptime->new(
+        pattern => '%d-%b-%Y',
+        on_error => 'croak',
+    );
+    return $self->ua->get_p($self->base_url.'/riders.php?mw=1&y='.$year.'&pid='.$pid)
+        ->then(sub($tx) {
+            my $info = {
+                teams => 0,
+                results => [],
+            };
+            my $res = $tx->result;
+            die 'could not fetch rider info for '.$pid.': '.$res->code
+                unless $res->is_success;
+            my $page = $res->dom;
+            $page->at('div#content table.noevents')
+                 ->find('tr')->each(sub($row, $n) {
+                my $cols = $row->children('td')->to_array;
+                return
+                    if scalar $cols->@* == 0;
+
+                if ($cols->[0]->text eq 'Team(s)') {
+                    $info->{teams} = $cols->[1]->text+0;
+                }
+            });
+            my $after_results = $page->at('div#content a[name="results"]');
+            my $no_results = $after_results->following('p')->first;
+            if ($no_results && $no_results->at('em')->text eq 'No results found.') {
+                return $info;
+            }
+
+            my $month;
+            $after_results
+                 ->following('table.noevents')->first
+                 ->find('tr')->each(sub($row, $n) {
+                my $cols = $row->children('td')->to_array;
+                return
+                    if scalar $cols->@* == 0;
+
+                $month = $cols->[0]->text
+                    if $cols->[0]->text;
+
+                my $date = $date_parser->parse_datetime(
+                    sprintf "%d-%s-%d" => $cols->[1]->text, $month, $year
+                );
+                my ($race, $stage) = split(' :: ', $cols->[2]->at('a')->text, 2);
+                push $info->{results}->@*, {
+                    pid => $pid,
+                    race => $race,
+                    stage => $stage,
+                    date => $date->iso8601,
+                    points => $cols->[3]->text+0,
+                };
+            });
+            return $info;
+        })
+        ->catch(sub($err) {
+            die 'could not fetch rider info for '.$pid.': '.$err;
+        })
 }
 
 sub get_position($self) {
     $self->login;
+    say "get position...";
     my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y=2023')->result;
     die 'Could not fetch team: '.$res->code
         unless $res->is_success;
     
     my $page = $res->dom;
-    my $rows = $page->at('div[id="content"] table')->children('tr')->tail(-1)->to_array;
+    my $rows = $page->at('div#content table')->children('tr')->tail(-1)->to_array;
     my $cur_pos;
     my $found = 0;
     for my $row ($rows->@*) {
