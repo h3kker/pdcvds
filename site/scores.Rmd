@@ -1,0 +1,67 @@
+---
+title: VDS Scores
+author: hekker
+output:
+    html_document:
+        toc: true
+        theme: spacelab
+date: "`r format(Sys.time())`"
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(jsonlite)
+library(lubridate)
+library(knitr)
+library(ggplot2)
+library(DT)
+theme_set(theme_bw())
+source("_funcs.R")
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r load}
+team <- load_team("../data/team-2023.json")
+```
+
+## Rider Scores
+
+```{r current_table}
+team$riders %>%
+    select(name, country, team, cat, age, price, score, previous) %>%
+    datatable(
+        options = list(
+            pageLength = 25,
+            dom = "ft"
+        )
+    )
+```
+
+```{r score_dev, fig.width=14}
+team$scores %>%
+    ggplot(aes(x = date, y = score)) +
+        geom_step(aes(color = name)) +
+        geom_label(data = team$scores %>%
+                group_by(name) %>%
+                slice_max(n = 1, order_by = date),
+            aes(x = date, y = score, label = name),
+            hjust = "right") +
+        theme(legend.position = "none")
+```
+
+## Ranking
+
+```{r ranking}
+team$standings %>%
+    arrange(desc(date)) %>%
+    head(1) %>%
+    kable()
+```
+
+```{r ranking_hist, fig.width=14}
+team$standings %>%
+    ggplot(aes(x = date, y = position)) +
+    geom_step() +
+    ylim(0, 813)
+```

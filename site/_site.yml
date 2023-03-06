@@ -1,0 +1,10 @@
+name: 'pdc-vds'
+output_dir: "../out"
+theme: spacelab
+navbar:
+  title: "PDC VDS"
+  left:
+    - text: "Upcoming"
+      href: index.html
+    - text: "Scores"
+      href: scores.html

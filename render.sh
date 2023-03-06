@@ -5,5 +5,5 @@ set -exo pipefail
 ./myteam.pl
 ./race-info.pl
 R --vanilla <<_EOCMD
-rmarkdown::render('pdcvds.Rmd', output_dir='out/')
+rmarkdown::render_site("site/")
 _EOCMD

@@ -49,6 +49,7 @@ sub _read_current($self) {
         $team = {
             standings => [],
             riders => [],
+            scores => [],
         };
     }
     $team;
@@ -93,8 +94,12 @@ sub get_riders($self) {
     my $res = $self->ua->get($self->base_url.'/myteam.php?mw=1&y=2023')->result;
     die 'Could not fetch team: '.$res->code
         unless $res->is_success;
+    
+    my $now = DateTime->now;
 
     my @riders;
+    my @scores = ($self->current_team->{scores} // [])->@*;
+
     my $page = $res->dom;
     my $rows = $page->at('div[id="content"] table')->children('tr');
     $rows->tail(-1)->head(-1)->each(sub($row, $n) {
@@ -112,8 +117,14 @@ sub get_riders($self) {
             previous => $cols->[7]->text,
             score => $cols->[8]->text,
         };
+        push @scores, {
+            name => $cols->[4]->at('a')->text,
+            date => $now->iso8601,
+            score => $cols->[8]->text,
+        };
     });
     $self->current_team->{riders} = \@riders;
+    $self->current_team->{scores} = \@scores;
     \@riders;
 }
 
