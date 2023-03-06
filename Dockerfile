@@ -22,7 +22,8 @@ RUN curl -Lo /tmp/bw.zip 'https://vault.bitwarden.com/download/?app=cli&platform
     mv bw /usr/local/bin && \
     rm /tmp/bw.zip
 
-COPY myteam.pl race-info.pl pdcvds.Rmd render.sh /srv/
+COPY myteam.pl race-info.pl render.sh /srv/
+COPY site /srv/site/
 COPY lib /srv/lib/
 WORKDIR /srv
 
