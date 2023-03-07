@@ -11,7 +11,7 @@ my $pdc = PdcVds->new;
 
 $pdc->get_riders;
 
-$pdc->current_team->{specialties} //= [];
+$pdc->current_team->{specialties} = [];
 for my $r ($pdc->current_team->{riders}->@*) {
     say "fetch pcs for ".$r->{name};
     my $spec = $pcs->rider_specialties($r->{name});
