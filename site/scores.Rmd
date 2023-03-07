@@ -117,6 +117,7 @@ team$riders %>%
     select(pid, name, price, spec, spec_rate) %>%
     full_join(team$specialties) %>%
     arrange(desc(price)) %>%
+    select(-pid) %>%
     datatable(
         options = list(
             pageLength = 25,
