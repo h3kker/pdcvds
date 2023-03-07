@@ -6,6 +6,7 @@ use Mojo::UserAgent;
 use Mojo::JSON qw(encode_json);
 use Mojo::File;
 use Mojo::Util qw(slugify);
+use Mojo::URL;
 use DateTime;
 use utf8;
 
@@ -36,6 +37,8 @@ sub upcoming($self) {
     my $next_week = DateTime->now->add(weeks => 1);
     
     my $res = $self->ua->get($self->base_url.'/races.php?popular=pro_me&s=upcoming-races')->result;
+    die 'Unable to fetch: '.$res->code
+        unless $res->is_success;
     my $rows = $res->dom->at('.table-cont table tbody')->find('tr');
     $rows->each(sub($r, $n) {
         my $cols = $r->find('td')->to_array;
@@ -49,6 +52,43 @@ sub upcoming($self) {
         my $start_list = $cols->[4]->at('a')->attr('href');
         $self->startlist($self->base_url.'/'.$start_list);
     });
+}
+
+sub search_rider($self, $name) {
+    my $search_url = Mojo::URL->new($self->base_url.'/resources/search.php')
+        ->query(term => $name);
+
+    my $res = $self->ua->get($search_url)->result;
+    die 'Unable to fetch: '.$res->code
+        unless $res->is_success;
+    my @rows = grep { $_->{page} eq 'rider' } $res->json->@*;
+    if (scalar @rows == 0) {
+        die 'no result found for '.$name;
+    }
+    return $rows[0];
+}
+
+sub rider_specialties($self, $name) {
+    my $rider = $self->search_rider($name);
+
+    my $res = $self->ua->get($self->base_url.'/rider/'.$rider->{id})->result;
+    die 'Unable to fetch: '.$res->code
+        unless $res->is_success;
+    if (my $hdr = $res->dom->at('div.main h1')) {
+        die 'Rider '.$name.' ('.$rider->{id}.') not found'
+            if $hdr->text eq 'Page not found';
+    }
+    
+    my $cats = {};
+    my $pps = $res->dom->at('div.pps ul');
+    unless ($pps) {
+        die 'could not find pps for '.$name;
+    }
+    $pps->find('li')->each(sub($li, $n) {
+        my $spec_name = $li->at('div.title a')->text;
+        $cats->{$spec_name} = $li->at('div.pnt')->text + 0;
+    });
+    return $cats;
 }
 
 sub startlist($self, $start_url) {

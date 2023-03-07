@@ -3,21 +3,19 @@ use lib qw(./lib);
 
 use v5.36;
 
-use PdcVds;
 use ProcyclingStats;
+use PdcVds;
+
 
 my $pcs = ProcyclingStats->new;
 my $pdc = PdcVds->new;
-
-$pdc->get_riders;
-
-$pdc->current_team->{specialties} //= [];
-for my $r ($pdc->current_team->{riders}->@*) {
+my $team = $pdc->current_team;
+$team->{specialties} //= [];
+for my $r ($team->{riders}->@*) {
     say "fetch pcs for ".$r->{name};
     my $spec = $pcs->rider_specialties($r->{name});
     $spec->{pid} = $r->{pid};
-    push $pdc->current_team->{specialties}->@*, $spec;
+    push $team->{specialties}->@*, $spec;
 }
-
-$pdc->get_position;
 $pdc->write_team;
+

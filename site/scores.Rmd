@@ -15,6 +15,7 @@ library(lubridate)
 library(knitr)
 library(ggplot2)
 library(DT)
+library(tidyr)
 theme_set(theme_bw())
 source("_funcs.R")
 
@@ -29,7 +30,7 @@ team <- load_team("../data/team-2023.json")
 
 ```{r current_table}
 team$riders %>%
-    select(name, country, team, cat, age, price, score, previous, pdc_teams) %>%
+    select(name, country, team, cat, age, price, pdc_teams, previous, score) %>%
     arrange(desc(score), desc(price)) %>%
     datatable(
         options = list(
@@ -107,4 +108,19 @@ team$results %>%
         geom_step() +
         geom_point(aes(size = count)) +
         geom_label(aes(label = race), hjust = "right", nudge_x = -10000)
+```
+
+## PCS Specialties
+
+```{r specialties}
+team$riders %>%
+    select(pid, name, price, spec, spec_rate) %>%
+    full_join(team$specialties) %>%
+    arrange(desc(price)) %>%
+    datatable(
+        options = list(
+            pageLength = 25,
+            dom = "ft"
+        )
+    )
 ```

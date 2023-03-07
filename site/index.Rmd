@@ -33,7 +33,9 @@ races <- bind_rows(lapply(Sys.glob("../data/startlist-*.json"), load_race))
 ```{r upcoming}
 inner_join(team$riders, races) %>%
     filter(end_date >= today()) %>%
-    select(start_date, race, name, team, price) %>%
+    select(start_date, race, name, team, price, spec, spec_rate) %>%
+    mutate(spec = sprintf("%s (%d%%)", spec, spec_rate)) %>%
+    select(-spec_rate) %>%
     arrange(start_date, race, desc(price)) %>%
     kable()
 ```
