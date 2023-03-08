@@ -24,6 +24,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```{r load}
 team <- load_team("../data/team-2023.json")
 races <- bind_rows(lapply(Sys.glob("../data/startlist-*.json"), load_race))
+watch <- fromJSON("../watch.json")
 ```
 
 [My Team](https://www.pdcvds.com/myteam.php?mw=1&y=2023)
@@ -38,4 +39,14 @@ inner_join(team$riders, races) %>%
     select(-spec_rate) %>%
     arrange(start_date, race, desc(price)) %>%
     kable()
+```
+
+## Extra Watch
+
+```{r extra}
+inner_join(watch, races) %>%
+  filter(end_date >= today()) %>%
+  select(start_date, race, name) %>%
+  arrange(start_date, race, name) %>%
+  kable()
 ```
