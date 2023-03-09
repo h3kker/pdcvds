@@ -1,6 +1,7 @@
 FROM perl:5.36
 
-RUN apt install -y locales && \
+RUN apt update && \
+    apt install -y locales && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen
 ENV LC_ALL en_US.UTF-8
