@@ -13,7 +13,8 @@ RUN apt update && \
     r-cran-ggplot2 \
     r-cran-rmarkdown \
     r-cran-dt \
-    r-cran-tidyr
+    r-cran-tidyr \
+    r-cran-stringr
 
 RUN apt install -y locales && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \

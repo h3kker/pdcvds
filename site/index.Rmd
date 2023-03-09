@@ -1,10 +1,5 @@
 ---
 title: VDS Upcoming Races
-author: hekker
-output:
-  html_document:
-    toc: false
-    theme: spacelab
 date: "`r format(Sys.time())`"
 ---
 
@@ -14,6 +9,7 @@ library(jsonlite)
 library(lubridate)
 library(knitr)
 library(ggplot2)
+library(stringr)
 theme_set(theme_bw())
 source("_funcs.R")
 
@@ -23,30 +19,75 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 
 ```{r load}
 team <- load_team("../data/team-2023.json")
-races <- bind_rows(lapply(Sys.glob("../data/startlist-*.json"), load_race))
+start_lists <- bind_rows(
+  lapply(Sys.glob("../data/startlist-*.json"), load_race)
+)
 watch <- fromJSON("../watch.json")
+
+start_lists <- start_lists %>%
+  filter(end_date >= today())
+
+races <- start_lists %>%
+  select(race, start_date, end_date) %>%
+  unique() %>%
+  arrange(start_date)
+
+myteam <- inner_join(team$riders, start_lists) %>%
+    select(start_date, race, name, team, price, spec, spec_rate) %>%
+    mutate(spec = sprintf("%s (%d%%)", spec, spec_rate)) %>%
+    select(-spec_rate)
+
+watched <- inner_join(watch, start_lists) %>%
+  select(start_date, race, name) %>%
+  arrange(start_date, race, name)
 ```
 
 [My Team](https://www.pdcvds.com/myteam.php?mw=1&y=2023)
 
-## Upcoming
+# Upcoming
 
-```{r upcoming}
-inner_join(team$riders, races) %>%
-    filter(end_date >= today()) %>%
-    select(start_date, race, name, team, price, spec, spec_rate) %>%
-    mutate(spec = sprintf("%s (%d%%)", spec, spec_rate)) %>%
-    select(-spec_rate) %>%
-    arrange(start_date, race, desc(price)) %>%
-    kable()
-```
+```{r upcoming, results="asis"}
 
-## Extra Watch
+races %>%
+  group_by(start_date, race) %>%
+  group_walk(function(t_race, key) {
+    tmp_my <- myteam %>%
+        filter(race == t_race$race)
 
-```{r extra}
-inner_join(watch, races) %>%
-  filter(end_date >= today()) %>%
-  select(start_date, race, name) %>%
-  arrange(start_date, race, name) %>%
-  kable()
+    cat(sprintf("## %s %s (%d)\n",
+      str_trunc(t_race$race, 25),
+      t_race$start_date,
+      nrow(tmp_my))
+    )
+    if (str_length(t_race$race) > 24) {
+      cat(t_race$race, "\n")
+    }
+
+    cat("\n### My Team\n")
+    if (nrow(tmp_my) > 0) {
+      print(tmp_my %>%
+          select(-race, -start_date) %>%
+          arrange(desc(price)) %>%
+          kable()
+      )
+    } else {
+      cat("*no one*\n")
+    }
+
+    cat("\n### Others\n")
+
+    tmp_watched <- watched %>%
+        filter(race == t_race$race)
+    if (nrow(tmp_watched) > 0) {
+      print(tmp_watched %>%
+          select(-race, -start_date) %>%
+          arrange(name) %>%
+          kable()
+      )
+    } else {
+      cat("*no one*\n\n")
+    }
+
+    cat("\n----\n\n")
+}, .keep = TRUE)
 ```

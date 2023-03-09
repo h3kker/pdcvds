@@ -1,5 +1,12 @@
 name: 'pdc-vds'
-theme: spacelab
+output:
+  html_document:
+    self_contained: no
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+    theme: paper
 navbar:
   title: "PDC VDS"
   left:

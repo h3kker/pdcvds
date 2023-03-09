@@ -1,10 +1,5 @@
 ---
 title: VDS Scores
-author: hekker
-output:
-    html_document:
-        toc: true
-        theme: spacelab
 date: "`r format(Sys.time())`"
 ---
 
@@ -40,6 +35,8 @@ team$riders %>%
     )
 ```
 
+### Cumulative Score
+
 ```{r score_dev, fig.width=14, fig.height=9}
 tmp_cumtable <- team$results %>%
     left_join(
@@ -72,7 +69,7 @@ bind_rows(tmp_init, tmp_cumtable, tmp_lastscore) %>%
         theme(legend.position = "none")
 ```
 
-## Ranking
+## Team Ranking
 
 ```{r ranking}
 team$standings %>%
@@ -88,7 +85,7 @@ team$standings %>%
     ylim(813, 0)
 ```
 
-## Races
+## Race Scores
 
 ```{r race_table}
 team$results %>%
@@ -97,6 +94,8 @@ team$results %>%
     arrange(desc(score)) %>%
     kable()
 ```
+
+### Cumulative Score
 
 ```{r race_cumsum, fig.width=14, fig.height=9}
 team$results %>%
@@ -110,18 +109,34 @@ team$results %>%
         geom_label(aes(label = race), hjust = "right", nudge_x = -10000)
 ```
 
-## PCS Specialties
+## PCS Rider Specialties
 
 ```{r specialties}
+tmp_specs <- team$specialties %>%
+    rename(OneDay = "One day races", TT = "Time trial") %>%
+    rowwise() %>%
+    mutate(sum = sum(Climber, GC, Sprint, TT, OneDay)) %>%
+    mutate(across(Climber:TT, ~ . / sum))
+
 team$riders %>%
-    select(pid, name, price, spec, spec_rate) %>%
-    full_join(team$specialties) %>%
+    select(pid, name, price, spec) %>%
+    mutate(spec =
+        if_else(spec == "One day races", "OneDay",
+        if_else(spec == "Time trial", "TT", spec))
+    ) %>%
+    full_join(tmp_specs) %>%
     arrange(desc(price)) %>%
-    select(-pid) %>%
+    select(-pid, sum) %>%
     datatable(
         options = list(
             pageLength = 25,
             dom = "ft"
         )
-    )
+    ) %>%
+    formatPercentage(4:8, digits = 0) %>%
+    formatStyle(4:8, 
+        background = styleColorBar(c(0, 1), "lightblue"),
+        backgroundSize = "98% 88%",
+        backgroundRepeat = "no-repeat",
+        backgroundPosition = "center")
 ```
