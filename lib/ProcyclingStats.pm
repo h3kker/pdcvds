@@ -34,7 +34,7 @@ sub _get_date($d) {
 }
 
 sub upcoming($self) {
-    my $next_week = DateTime->now->add(weeks => 1);
+    my $next_week = DateTime->now->add(weeks => 2);
     
     my $res = $self->ua->get($self->base_url.'/races.php?popular=pro_me&s=upcoming-races')->result;
     die 'Unable to fetch: '.$res->code
