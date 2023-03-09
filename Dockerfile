@@ -14,7 +14,8 @@ RUN curl -Lo /tmp/bw.zip 'https://vault.bitwarden.com/download/?app=cli&platform
 RUN cpanm --notest -i Mojolicious \
     DateTime \
     DateTime::Format::Strptime \
-    Moose
+    Moose && \
+    rm -rf ~/.cpanm
 
 RUN apt update && \
     apt install --no-install-recommends -y \
