@@ -20,6 +20,19 @@ has 'ua' => (
     }
 );
 
+has 'username' => (
+    is => 'ro',
+    default => 'h3kker',
+);
+
+has 'year' => (
+    is => 'ro',
+    lazy => 1,
+    default => sub {
+        DateTime->now->year;
+    },
+);
+
 has 'is_logged_in' => (
     is => 'rw',
     isa => 'Bool',
@@ -33,7 +46,10 @@ has 'base_url' => (
 
 has 'team_file' => (
     is => 'ro',
-    default => 'data/team-2023.json',
+    lazy => 1,
+    default => sub($self) {
+        'data/team-'.$self->year.'.json';
+    },
 );
 
 has 'current_team' => (
@@ -69,7 +85,7 @@ sub login($self) {
 
     my $res = $self->ua->max_redirects(2)->post($self->base_url.'/savelogin.php' => form => { 
         form => 'frmlogin', 
-        username => 'h3kker', 
+        username => $self->username, 
         password => $pw,
     })->result;
 
@@ -96,7 +112,7 @@ sub _map_team($self, $team) {
 sub get_riders($self) {
     $self->login;
     say "get team...";
-    my $res = $self->ua->get($self->base_url.'/myteam.php?mw=1&y=2023')->result;
+    my $res = $self->ua->get($self->base_url.'/myteam.php?mw=1&y='.$self->year)->result;
     die 'Could not fetch team: '.$res->code
         unless $res->is_success;
     
@@ -106,6 +122,10 @@ sub get_riders($self) {
     my @results;
 
     my $page = $res->dom;
+
+    if ($page->at('div#content')->at('p')->text =~ m/You don't have a team for/) {
+        die 'NO team in '.$self->year.'?';
+    }
     my $rows = $page->at('div#content table')->children('tr');
     my @info_promises;
     $rows->tail(-1)->head(-1)->each(sub($row, $n) {
@@ -142,9 +162,8 @@ sub get_riders($self) {
     \@riders;
 }
 
-sub get_rider_info($self, $pid) {
+sub get_rider_info($self, $pid, $year=$self->year) {
     say "get info for ".$pid;
-    my $year = '2023';
     my $date_parser = DateTime::Format::Strptime->new(
         pattern => '%d-%b-%Y',
         on_error => 'croak',
@@ -208,7 +227,7 @@ sub get_rider_info($self, $pid) {
 sub get_position($self) {
     $self->login;
     say "get position...";
-    my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y=2023')->result;
+    my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year)->result;
     die 'Could not fetch team: '.$res->code
         unless $res->is_success;
     
@@ -219,7 +238,7 @@ sub get_position($self) {
     for my $row ($rows->@*) {
         my $cols = $row->children('td')->to_array;
         $cur_pos = $cols->[0]->text || $cur_pos;
-        if ($cols->[1]->text eq 'h3kker') {
+        if ($cols->[1]->text eq $self->username) {
             $found = 1;
             last;
         }
