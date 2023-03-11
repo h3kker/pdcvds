@@ -28,7 +28,7 @@ RUN apt update && \
     r-cran-tidyr \
     r-cran-stringr
 
-COPY myteam.pl race-info.pl render.sh watch.json /srv/
+COPY myteam.pl race-info.pl vds-history.pl render.sh watch.json /srv/
 COPY site /srv/site/
 COPY lib /srv/lib/
 WORKDIR /srv
