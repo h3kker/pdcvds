@@ -6,8 +6,10 @@ library(tidyr)
 load_team <- function(fn) {
     team <- fromJSON(fn)
 
-    team$standings <- team$standings %>%
-        mutate(date = ymd_hms(date), position = as.numeric(position))
+    if (length(team$standings) > 0) {
+        team$standings <- team$standings %>%
+            mutate(date = ymd_hms(date), position = as.numeric(position))
+    }
     team$results <- team$results %>%
         mutate(date = ymd_hms(date))
     team$riders <- team$riders %>% full_join(
@@ -15,7 +17,7 @@ load_team <- function(fn) {
             pivot_longer(!pid, names_to = "spec", values_to = "pcs_score") %>%
             group_by(pid) %>%
             mutate(total = sum(pcs_score)) %>%
-            slice_max(n = 1, order_by = pcs_score) %>%
+            slice_max(n = 1, order_by = pcs_score, with_ties = FALSE) %>%
             mutate(spec_rate = round(pcs_score/total*100)) %>%
             select(pid, spec, spec_rate),
         by = c("pid")

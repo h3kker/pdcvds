@@ -1,0 +1,156 @@
+---
+title: VDS Scores
+date: "`r format(Sys.time())`"
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(jsonlite)
+library(lubridate)
+library(knitr)
+library(ggplot2)
+library(DT)
+library(tidyr)
+theme_set(theme_bw())
+source("_funcs.R")
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r load}
+team_hist <- lapply(seq(2019, 2023), function(year) {
+    team <- load_team(paste("../data/team-", year, ".json", sep = ""))
+    team$riders <- team$riders %>%
+        mutate(year = year) %>%
+        arrange(desc(score), price) %>%
+        mutate(rank = row_number())
+    team$results <- team$results
+    team
+})
+
+all_teams <- bind_rows(lapply(team_hist, function(tt) {
+    tt$riders
+}))
+
+all_results <- bind_rows(lapply(team_hist, function(tt) {
+    tt$results
+})) %>% unique()
+```
+## Members
+
+```{r team_members, fig.height=9}
+all_teams %>%
+    ggplot(aes(x = year, y = name)) +
+    geom_point(aes(alpha = price, size = score))
+```
+
+## Rank History
+
+```{r pos_history}
+tmp_common <- all_teams %>%
+    inner_join(all_teams %>%
+        count(name) %>%
+        filter(n > 1))
+
+tmp_common %>%
+    select(name, year, rank) %>%
+    pivot_wider(names_from=year, values_from=rank) %>%
+    datatable(
+        options = list(
+            pageLength = 50,
+            dom = "ft"
+        )
+    )
+```
+
+## Rider Points per Season
+
+```{r year_scores, fig.height=9}
+all_results %>%
+    group_by(pid, season = year(date)) %>%
+    summarise(points = sum(points)) %>%
+    inner_join(all_teams %>%
+        select(pid, name, year)
+    ) %>%
+    ggplot(aes(x = season, y = points, group = name)) +
+    geom_line() +
+    geom_point(aes(color = season == year)) +
+    facet_wrap(~year) +
+    theme(legend.position = "none")
+```
+
+```{r year_scores_table}
+all_results %>%
+    group_by(pid, season = year(date)) %>%
+    summarise(points = sum(points)) %>%
+    inner_join(all_teams %>%
+        select(pid, name, year)
+    ) %>%
+    ungroup() %>%
+    select(name, year, season, points) %>%
+    pivot_wider(names_from = season, values_from = points) %>%
+    pivot_wider(names_from = year,
+        names_prefix = "t",
+        values_from = year,
+        values_fill = 0) %>%
+    mutate(across(starts_with("t"), ~ . > 0)) %>%
+    arrange(name) %>%
+    datatable(
+        options = list(
+            pageLength = 100,
+            dom = "ft",
+            columnDefs = list(list(targets = 7:11, visible = FALSE))
+        )
+    ) %>%
+    formatStyle("2019", "t2019",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2020", "t2020",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2021", "t2021",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2022", "t2022",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2023", "t2023",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    )
+```
+
+## Team Total per Season
+
+```{r year_totals}
+all_results %>%
+    group_by(pid, season = year(date)) %>%
+    summarise(points = sum(points)) %>%
+    inner_join(
+        all_teams %>%
+        select(pid, name, year)
+    ) %>%
+    group_by(season, year) %>%
+    summarise(points = sum(points)) %>%
+    ggplot(aes(x = season, y = points, color = factor(year))) +
+        geom_line()
+```
+
+```{r year_totals_table}
+all_results %>%
+    group_by(pid, season = year(date)) %>%
+    summarise(points = sum(points)) %>%
+    inner_join(
+        all_teams %>%
+        select(pid, name, year)
+    ) %>%
+    group_by(season, year) %>%
+    summarise(points = sum(points)) %>%
+    rename(team = year) %>%
+    pivot_wider(names_from = season, values_from = points) %>%
+    datatable(
+        options = list(
+            pageLength = 50,
+            dom = "ft"
+        )
+    )
+```
