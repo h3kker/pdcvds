@@ -171,7 +171,11 @@ sub get_rider_info($self, $pid, $year=$self->year) {
     return $self->ua->get_p($self->base_url.'/riders.php?mw=1&y='.$year.'&pid='.$pid)
         ->then(sub($tx) {
             my $info = {
-                teams => 0,
+                year => $year,
+                teams => undef,
+                team => undef,
+                team_short => undef,
+                price => undef,
                 results => [],
             };
             my $res = $tx->result;
@@ -184,8 +188,18 @@ sub get_rider_info($self, $pid, $year=$self->year) {
                 return
                     if scalar $cols->@* == 0;
 
-                if ($cols->[0]->text eq 'Team(s)') {
+                if ($cols->[0]->text eq 'Team(s)' && $cols->[1]->text ne '') {
                     $info->{teams} = $cols->[1]->text+0;
+                }
+                elsif ($cols->[0]->text =~ /Salary/ && $cols->[1]->text ne '') {
+                    $info->{price} = $cols->[1]->text+0;
+                }
+                elsif ($cols->[0]->text eq 'UCI Team' && $cols->[1]->at('a')->text) {
+                    my ($team, $team_short) = ($cols->[1]->at('a')->text =~ /(.*) \((\w+)\)/);
+                    $info->{team} = $self->_map_team($team)
+                        if $team;
+                    $info->{team_short} = $team_short
+                        if $team_short;
                 }
             });
             my $after_results = $page->at('div#content a[name="results"]');

@@ -15,26 +15,56 @@ theme_set(theme_bw())
 source("_funcs.R")
 
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+member_highlight_table <- function(dd) {
+    dd %>%
+    pivot_wider(names_from = year, names_prefix = "t",
+        values_from = year, values_fill = 0) %>%
+    mutate(across(starts_with("t"), ~ . > 0)) %>%
+    arrange(name) %>%
+    datatable(
+        options = list(
+            pageLength = 100,
+            dom = "ft",
+            columnDefs = list(list(targets = 7:11, visible = FALSE))
+        )
+    ) %>%
+    formatStyle("2019", "t2019",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2020", "t2020",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2021", "t2021",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2022", "t2022",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    ) %>%
+    formatStyle("2023", "t2023",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+    )
+}
 ```
 
 ```{r load}
-team_hist <- lapply(seq(2019, 2023), function(year) {
+all_teams <- bind_rows(lapply(seq(2019, 2023), function(year) {
     team <- load_team(paste("../data/team-", year, ".json", sep = ""))
     team$riders <- team$riders %>%
         mutate(year = year) %>%
         arrange(desc(score), price) %>%
         mutate(rank = row_number())
-    team$results <- team$results
-    team
-})
-
-all_teams <- bind_rows(lapply(team_hist, function(tt) {
-    tt$riders
+    team$riders
 }))
 
-all_results <- bind_rows(lapply(team_hist, function(tt) {
-    tt$results
-})) %>% unique()
+hist_str <- fromJSON("../data/history.json", simplifyDataFrame = FALSE)
+rider_seasons <- bind_rows(lapply(hist_str, function(hh) {
+    bind_cols(name = hh$name, pid = hh$pid, 
+        bind_rows(lapply(hh$seasons, bind_cols)))
+}))
+all_results <- bind_rows(lapply(hist_str, function(hh) {
+    lapply(hh$results, bind_cols)
+}))
 ```
 ## Members
 
@@ -54,7 +84,7 @@ tmp_common <- all_teams %>%
 
 tmp_common %>%
     select(name, year, rank) %>%
-    pivot_wider(names_from=year, values_from=rank) %>%
+    pivot_wider(names_from = year, values_from = rank) %>%
     datatable(
         options = list(
             pageLength = 50,
@@ -89,34 +119,7 @@ all_results %>%
     ungroup() %>%
     select(name, year, season, points) %>%
     pivot_wider(names_from = season, values_from = points) %>%
-    pivot_wider(names_from = year,
-        names_prefix = "t",
-        values_from = year,
-        values_fill = 0) %>%
-    mutate(across(starts_with("t"), ~ . > 0)) %>%
-    arrange(name) %>%
-    datatable(
-        options = list(
-            pageLength = 100,
-            dom = "ft",
-            columnDefs = list(list(targets = 7:11, visible = FALSE))
-        )
-    ) %>%
-    formatStyle("2019", "t2019",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
-    ) %>%
-    formatStyle("2020", "t2020",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
-    ) %>%
-    formatStyle("2021", "t2021",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
-    ) %>%
-    formatStyle("2022", "t2022",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
-    ) %>%
-    formatStyle("2023", "t2023",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
-    )
+    member_highlight_table()
 ```
 
 ## Team Total per Season
@@ -153,4 +156,27 @@ all_results %>%
             dom = "ft"
         )
     )
+```
+
+## Rider Popularity
+
+```{r popularity_table}
+rider_seasons %>%
+    select(name, year, teams) %>%
+    pivot_wider(names_from = year, values_from = teams) %>%
+    inner_join(all_teams %>% select(name, year)) %>%
+    member_highlight_table()
+```
+
+## Total Score over Year
+
+```{r score_over_year}
+all_results %>%
+    mutate(season = year(date), doy = yday(date)) %>%
+    inner_join(all_teams %>% select(pid, season = year)) %>%
+    group_by(season) %>%
+    arrange(doy) %>%
+    mutate(cumpoints = cumsum(points)) %>%
+    ggplot(aes(x = doy, y = cumpoints, color = factor(season))) +
+    geom_line()
 ```
