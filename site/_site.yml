@@ -7,6 +7,7 @@ output:
     toc_float:
       collapsed: false
     theme: paper
+    css: styles.css
 navbar:
   title: "PDC VDS"
   left:

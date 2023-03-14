@@ -28,17 +28,17 @@ start_lists <- start_lists %>%
   filter(end_date >= today())
 
 races <- start_lists %>%
-  select(race, start_date, end_date) %>%
+  select(race, start_date, end_date, link) %>%
   unique() %>%
   arrange(start_date)
 
-myteam <- inner_join(team$riders, start_lists) %>%
-    select(start_date, end_date, race, name, team, price, spec, spec_rate) %>%
+myteam <- inner_join(team$riders, start_lists %>% select(-team)) %>%
+    select(start_date, end_date, race, name, team, number, price, spec, spec_rate) %>%
     mutate(spec = sprintf("%s (%d%%)", spec, spec_rate)) %>%
     select(-spec_rate)
 
 watched <- inner_join(watch, start_lists) %>%
-  select(start_date, race, name) %>%
+  select(start_date, race, name, team, number) %>%
   arrange(start_date, race, name)
 ```
 
@@ -63,17 +63,19 @@ races %>%
     tmp_my <- myteam %>%
         filter(race == t_race$race)
 
-    cat(sprintf("## %s %s (%d)\n",
+    cat(sprintf("## [%s](%s) %s (%d)\n",
       str_trunc(t_race$race, 25),
+      t_race$link,
+      format(t_race$start_date, "%a, %d.%m"),
+      nrow(tmp_my))
+    )
+    cat("- ", t_race$race, "\n")
+    cat("- ", sprintf("%s",
       if_else(t_race$start_date == t_race$end_date,
         as.character(t_race$start_date),
         sprintf("%s - %s", t_race$start_date, t_race$end_date)
-      ),
-      nrow(tmp_my))
-    )
-    if (str_length(t_race$race) > 24) {
-      cat(t_race$race, "\n")
-    }
+      )
+    ), "\n")
 
     cat("\n### My Team\n")
     if (nrow(tmp_my) > 0) {
@@ -93,7 +95,7 @@ races %>%
     if (nrow(tmp_watched) > 0) {
       print(tmp_watched %>%
           select(-race, -start_date) %>%
-          arrange(name) %>%
+          arrange(number, team, name) %>%
           kable()
       )
     } else {

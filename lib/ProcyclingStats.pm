@@ -93,9 +93,9 @@ sub rider_specialties($self, $name) {
 
 sub startlist($self, $start_url) {
     my @subs = ('result/overview', 'gc/overview');
-    my $ov_res;
+    my $ov_res; my $overview_url;
     for my $sub (@subs) {
-        my $overview_url = $start_url;
+        $overview_url = $start_url;
         $overview_url =~ s,(result/)?startlist$,$sub,;
         $ov_res = $self->ua->get($overview_url)->result;
         die 'Unable to fetch: '.$ov_res->code
@@ -126,7 +126,7 @@ sub startlist($self, $start_url) {
             my $name = $r->at('a span')->text;
             $name =~ /^([\p{Upper}\-'ß ]+) (.+)$/;
             die "$name does not match"
-            unless $1 && $2;
+                unless $1 && $2;
             return {
                 name => sprintf("%s %s" => $2, join('', map { ucfirst(lc $_) } split "([ '-])", $1)),
                 team => $team,
@@ -137,6 +137,7 @@ sub startlist($self, $start_url) {
 
     Mojo::File->new("data/startlist-".$start_date."-".slugify($race).".json")->spurt(
         encode_json({
+            link => $overview_url,
             race => $race,
             start_date => $start_date,
             end_date => $end_date,

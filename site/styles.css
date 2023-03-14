@@ -1,0 +1,15 @@
+.tocify-header {
+    text-indent: 0px;
+}
+.tocify-header .tocify-item {
+    text-indent: 5px;
+}
+.tocify-subheader {
+    text-indent: 0px;
+}
+.tocify-subheader .tocify-item {
+    padding-left: 0;
+}
+.tocify .list-group-item.active, .tocify .list-group-item.active:hover, .tocify .list-group-item.active:focus {
+    background-color: #c8d8e8;
+}

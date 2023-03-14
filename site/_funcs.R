@@ -30,6 +30,9 @@ load_race <- function(fn) {
     bind_cols(ll$riders,
         race = ll$race,
         start_date = ymd(ll$start_date),
-        end_date = ymd(ll$end_date)
+        end_date = ymd(ll$end_date),
+        link = ll$link,
+        team = ll$team,
+        number = ll$number
     )
 }
