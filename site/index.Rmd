@@ -10,6 +10,7 @@ library(lubridate)
 library(knitr)
 library(ggplot2)
 library(stringr)
+library(tidyr)
 theme_set(theme_bw())
 source("_funcs.R")
 
@@ -22,6 +23,10 @@ team <- load_team("../data/team-2023.json")
 start_lists <- bind_rows(
   lapply(Sys.glob("../data/startlist-*.json"), load_race)
 )
+start_lists <- start_lists %>%
+  group_by(race) %>%
+  mutate(rank_t = rank/max(rank))
+
 watch <- fromJSON("../watch.json")
 
 start_lists <- start_lists %>%
@@ -33,29 +38,36 @@ races <- start_lists %>%
   arrange(start_date)
 
 myteam <- inner_join(team$riders, start_lists %>% select(-team)) %>%
-    select(start_date, end_date, race, name, team, number, price, spec, spec_rate) %>%
-    mutate(spec = sprintf("%s (%d%%)", spec, spec_rate)) %>%
-    select(-spec_rate)
+  select(start_date, end_date, race, name, team, rank, rank_t, 
+    price, spec, spec_rate) %>%
+  mutate(spec = sprintf("%s (%d%%)", spec, spec_rate)) %>%
+  select(-spec_rate)
 
-watched <- inner_join(watch, start_lists) %>%
-  select(start_date, race, name, team, number) %>%
-  arrange(start_date, race, name)
+watched <- start_lists %>%
+  full_join(watch %>%
+    mutate(watched = TRUE)) %>%
+  filter(rank <= 10 | watched) %>%
+  replace_na(list(watched = FALSE)) %>%
+  anti_join(myteam, by = c("name", "race")) %>%
+  ungroup()
 ```
 
 [My Team](https://www.pdcvds.com/myteam.php?mw=1&y=2023)
 
 # Upcoming
 
-```{r calendar, fig.width=12}
+```{r calendar, fig.width=12, fig.height=8, dependson=c('load')}
 myteam %>%
   mutate(end_date = if_else(start_date == end_date, end_date + 1, end_date)) %>%
-  ggplot(aes(x = start_date, xend = end_date, y = name, yend = name)) +
-  geom_segment(linewidth = 5) +
+  ggplot(aes(x = start_date + hours(1), xend = end_date - hours(1), 
+             y = name, yend = name)) +
+  geom_segment(aes(linewidth = rank_t)) +
   scale_y_discrete("") +
-  scale_x_date("")
+  scale_x_datetime("") +
+  scale_linewidth_binned(range = c(7, .1), n.breaks = 10)
 ```
 
-```{r upcoming, results="asis"}
+```{r upcoming, results="asis", dependson=c('load')}
 
 races %>%
   group_by(start_date, race) %>%
@@ -80,8 +92,8 @@ races %>%
     cat("\n### My Team\n")
     if (nrow(tmp_my) > 0) {
       print(tmp_my %>%
-          select(-race, -start_date, -end_date) %>%
-          arrange(desc(price)) %>%
+          select(-race, -start_date, -end_date, -rank_t) %>%
+          arrange(rank) %>%
           kable()
       )
     } else {
@@ -94,8 +106,9 @@ races %>%
         filter(race == t_race$race)
     if (nrow(tmp_watched) > 0) {
       print(tmp_watched %>%
-          select(-race, -start_date) %>%
-          arrange(number, team, name) %>%
+          mutate(watched = if_else(watched, "**", "")) %>%
+          select(name, team, rank, watched) %>%
+          arrange(rank, team, name) %>%
           kable()
       )
     } else {
@@ -104,4 +117,5 @@ races %>%
 
     cat("\n----\n\n")
 }, .keep = TRUE)
+
 ```

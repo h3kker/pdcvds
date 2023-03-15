@@ -31,8 +31,6 @@ load_race <- function(fn) {
         race = ll$race,
         start_date = ymd(ll$start_date),
         end_date = ymd(ll$end_date),
-        link = ll$link,
-        team = ll$team,
-        number = ll$number
+        link = ll$link
     )
 }
