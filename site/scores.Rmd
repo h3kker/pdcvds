@@ -87,6 +87,22 @@ team$standings %>%
 
 ## Race Scores
 
+### Latest Scores
+
+```{r latest_races}
+team$results %>%
+    filter(date > today() - weeks(1)) %>%
+    inner_join(team$riders %>%
+        select(name, pid)) %>%
+    replace_na(list(stage = "")) %>%
+    mutate(race = str_trim(paste(race, stage))) %>%
+    select(date, race, name, points) %>%
+    arrange(desc(date), race, desc(points)) %>%
+    kable()
+```
+
+### Best Races
+
 ```{r race_table}
 team$results %>%
     group_by(race) %>%
