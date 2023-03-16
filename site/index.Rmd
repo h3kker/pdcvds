@@ -61,10 +61,10 @@ myteam %>%
   mutate(end_date = if_else(start_date == end_date, end_date + 1, end_date)) %>%
   ggplot(aes(x = start_date + hours(1), xend = end_date - hours(1), 
              y = name, yend = name)) +
-  geom_segment(aes(linewidth = rank_t)) +
+  geom_segment(aes(size = rank_t)) +
   scale_y_discrete("") +
   scale_x_datetime("") +
-  scale_linewidth_binned(range = c(7, .1), n.breaks = 10)
+  scale_size_binned(range = c(7, .1), n.breaks = 10)
 ```
 
 ```{r upcoming, results="asis", dependson=c('load')}
