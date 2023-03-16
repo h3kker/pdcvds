@@ -66,6 +66,22 @@ all_results <- bind_rows(lapply(hist_str, function(hh) {
     lapply(hh$results, bind_cols)
 }))
 ```
+
+## Total Score over Year
+
+```{r score_over_year, fig.width=10}
+all_results %>%
+    mutate(season = year(date), doy = yday(date)) %>%
+    inner_join(all_teams %>% select(pid, season = year)) %>%
+    group_by(season) %>%
+    arrange(doy) %>%
+    mutate(cumpoints = cumsum(points)) %>%
+    ggplot(aes(x = doy, y = cumpoints, color = factor(season))) +
+    geom_step(aes(size = season == year(today()))) +
+    scale_color_brewer(type = "qual", palette = "Set1") +
+    scale_size_manual(values = c(`FALSE` = .75, `TRUE` = 3), guide = "none")
+```
+
 ## Members
 
 ```{r team_members, fig.height=9}
@@ -166,19 +182,4 @@ rider_seasons %>%
     pivot_wider(names_from = year, values_from = teams) %>%
     inner_join(all_teams %>% select(name, year)) %>%
     member_highlight_table()
-```
-
-## Total Score over Year
-
-```{r score_over_year}
-all_results %>%
-    mutate(season = year(date), doy = yday(date)) %>%
-    inner_join(all_teams %>% select(pid, season = year)) %>%
-    group_by(season) %>%
-    arrange(doy) %>%
-    mutate(cumpoints = cumsum(points)) %>%
-    ggplot(aes(x = doy, y = cumpoints, color = factor(season))) +
-    geom_step(aes(size = season == year(today()))) +
-    scale_color_brewer(type = "qual", palette = "Set1") +
-    scale_size_manual(values = c(`FALSE` = .75, `TRUE` = 3), guide = "none")
 ```
