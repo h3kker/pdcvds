@@ -20,12 +20,13 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 
 ```{r load}
 team <- load_team("../data/team-2023.json")
-start_lists <- bind_rows(
-  lapply(Sys.glob("../data/startlist-*.json"), load_race)
-)
+start_lists <- bind_rows(lapply(
+  lapply(Sys.glob("../data/race-*.json"), load_race),
+  function(ll) ll$start_list))
+
 start_lists <- start_lists %>%
   group_by(race) %>%
-  mutate(rank_t = rank/max(rank))
+  mutate(rank_t = rank / max(rank))
 
 watch <- fromJSON("../watch.json")
 

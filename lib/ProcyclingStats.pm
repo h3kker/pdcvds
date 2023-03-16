@@ -107,6 +107,34 @@ sub race_info($self, $race_url) {
     }
 }
 
+sub race_info_stages($self, $race_url) {
+    my $ov_res = $self->ua->get($race_url)->result;
+    die 'Unable to fetch: '.$ov_res->code
+        unless $ov_res->is_success;
+    my $stages_head = $ov_res->dom->at('div.content')->find('h3')->first(sub($h) {
+        $h->text eq 'Stages'
+    });
+    return undef
+        unless $stages_head;
+
+    my $stages = [];
+    $stages_head->following('.table-cont')->first->find('li')->each(sub($st, $n) {
+        my $stage_info = $st->find('div')->to_array;
+        my ($num, $name) = (split ' \| ', $stage_info->[2]->at('a')->text);
+        $num =~ s/Stage //i;
+        my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
+
+        push $stages->@*, {
+            num => $n,
+            stage => $num,
+            name => $name,
+            length => $len + 0,
+            link => $self->base_url.'/'.$stage_info->[2]->at('a')->attr('href'),
+        }
+    });
+    return $stages;
+}
+
 sub start_list($self, $race_url) {
     my $start_url = $race_url;
     $start_url =~ s,/overview$,,;
@@ -121,22 +149,106 @@ sub start_list($self, $race_url) {
         my $cols = $row->find('td')->to_array;
         my $rank = $cols->[0]->text;
         my $name = $cols->[1]->at('a')->all_text;
-        # ranked table uses css to uppercase lastname, elsewhere
-        # it is hard uppercase.
-        $name =~ /^([\p{Word}\-' ]+) (.+)$/;
-        die "$name does not match"
-            unless $1 && $2;
         return {
             # force name to title case
-            name => sprintf("%s %s" => $2, join('', map { ucfirst(lc $_) } split "([ '-])", $1)),
+            name => _transform_name($name),
             team => $cols->[2]->at('a')->text,
             rank => $rank + 0,
         };
     });
 }
 
+sub _transform_name($name) {
+    # ranked table uses css to uppercase lastname, elsewhere
+    # it is hard uppercase.
+    $name =~ /^([\p{Word}\-' ]+) (.+)$/;
+    die "$name does not match"
+        unless $1 && $2;
+    sprintf("%s %s" => $2, join('', map { ucfirst(lc $_) } split "([ '-])", $1));
+}
+
+sub results($self, $race_url) {
+    my $stages = $self->race_info_stages($race_url);
+    unless ($stages) {
+        my $results_url = $race_url;
+        $results_url =~ s,/overview,/results,;
+        return $self->results_oneday($results_url);
+    }
+    
+    my $results = {
+        final => [],
+        stages => [],
+    };
+    for my $stage (sort { $a->{num} <=> $b->{num} } $stages->@*) {
+        say "fetch stage ".$stage->{stage};
+        my $res = $self->results_stage($stage->{link});
+        $stage->{result} = $res->{stage};
+        $stage->{gc} = $res->{gc};
+        push $results->{stages}->@*, $stage;
+    }
+    $results->{final} = $results->{stages}->[-1]->{gc};
+    $results;
+}
+
+sub results_oneday($self, $results_url) {
+    my $res = $self->ua->get($results_url)->result;
+    die 'Unable to fetch: '.$res->code
+        unless $res->is_success;
+
+    return {
+        final => _parse_result_rows(
+            $res->dom->at('div.content table.results'))->to_array,
+    }
+}
+
+sub results_stage($self, $results_url) {
+    my $res = $self->ua->get($results_url)->result;
+    die 'Unable to fetch: '.$res->code
+        unless $res->is_success;
+    my $tables = $res->dom->at('div.content')->find('table.results')->to_array;
+
+    return {
+        stage => _parse_result_rows($tables->[0])->to_array,
+        gc => _parse_result_rows($tables->[1])->to_array,
+    }
+}
+
+sub _parse_result_rows($tbl) {
+    my $idx = {};
+    $tbl->at('thead')->find('th')->each(sub($hh, $n) {
+        $idx->{lc $hh->text} = $n-1;
+    });
+
+    $tbl->at('tbody')->find('tr')->map(sub ($row) {
+        my $cols = $row->find('td')->to_array;
+        my $name = _transform_name($cols->[$idx->{rider}]->at('a')->text);
+        if ($cols->[$idx->{rnk}]->text =~ /^(DN[FS]|OTL)$/) {
+            return {
+                rank => undef,
+                name => $name,
+                team => $cols->[$idx->{team}]->at('a')->text,
+                uci_points => undef,
+                time => undef,
+            }
+        }
+
+        my $time = $cols->[$idx->{time}]->text;
+        unless ($time) {  # only first row has only text
+            $time = $cols->[$idx->{time}]->at('div')->text;
+        }
+
+        return {
+            rank => $cols->[$idx->{rnk}]->text + 0,
+            name => $name,
+            team => $cols->[$idx->{team}]->at('a')->text,
+            uci_points => ($cols->[$idx->{uci}]->text||0) + 0,
+            time => $time,
+        }
+    });
+}
+
 sub write_race($self, $race_info) {
-    my $fn = "data/startlist-".$race_info->{start_date}."-".slugify($race_info->{race}).".json";
+    my $fn = "data/race-".$race_info->{start_date}."-".slugify($race_info->{race}).".json";
     Mojo::File->new($fn)->spurt(
         encode_json($race_info)
     );

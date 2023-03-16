@@ -26,11 +26,14 @@ load_team <- function(fn) {
 }
 
 load_race <- function(fn) {
-    ll <- fromJSON(fn)
-    bind_cols(ll$riders,
-        race = ll$race,
-        start_date = ymd(ll$start_date),
-        end_date = ymd(ll$end_date),
-        link = ll$link
+    ll <- fromJSON(fn, simplifyVector = FALSE)
+    list(
+        start_list = bind_cols(
+            bind_rows(ll$riders),
+            race = ll$race,
+            start_date = ymd(ll$start_date),
+            end_date = ymd(ll$end_date),
+            link = ll$link
+        )
     )
 }
