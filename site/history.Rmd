@@ -178,7 +178,7 @@ all_results %>%
     arrange(doy) %>%
     mutate(cumpoints = cumsum(points)) %>%
     ggplot(aes(x = doy, y = cumpoints, color = factor(season))) +
-    geom_step(aes(linewidth = season == year(today()))) +
+    geom_step(aes(size = season == year(today()))) +
     scale_color_brewer(type = "qual", palette = "Set1") +
     scale_size_manual(values = c(`FALSE` = .75, `TRUE` = 3), guide = "none")
 ```
