@@ -94,6 +94,13 @@ sub login($self) {
     $self->is_logged_in(1);
 }
 
+sub _map_name($self, $name) {
+    state %name_map = (
+        'Sam Watson' => 'Samuel Watson',
+    );
+    $name_map{$name} || $name;
+}
+
 sub _map_team($self, $team) {
     state %team_map = (
         'Israel - Premier tech' => 'Israel - Premier Tech',
@@ -140,7 +147,7 @@ sub get_riders($self) {
             team_short => $cols->[2]->at('a')->text,
             team => $team,
             cat => $cols->[3]->all_text,
-            name => $cols->[4]->at('a')->text,
+            name => $self->_map_name($cols->[4]->at('a')->text),
             age => $cols->[5]->text,
             price => $cols->[6]->at('a')->text+0,
             previous => $cols->[7]->text+0,
