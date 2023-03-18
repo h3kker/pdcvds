@@ -14,9 +14,20 @@ GetOptions(
 ) || die("Usage!");
 
 my $pcs = ProcyclingStats->new;
-my $races = scalar $race_links->@* ?
-    [ map { { race => $_, link => $_ } } $race_links->@* ] :
-    $pcs->upcoming;
+my $races;
+
+if (scalar $race_links->@*) {
+    $races = [ map { { race => $_, link => $_ } } $race_links->@* ];
+}
+elsif ($get_results) {
+    $races = [ grep {
+        my $i = $pcs->read_race($_);
+        defined $i && !exists $i->{results}
+    } $pcs->available_results->@* ];
+}
+else {
+    $races = $pcs->upcoming;
+}
 
 for my $race ($races->@*) {
     say "fetch info for ".$race->{race};

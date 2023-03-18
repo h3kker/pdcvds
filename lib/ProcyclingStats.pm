@@ -3,7 +3,7 @@ package ProcyclingStats;
 use v5.36;
 
 use Mojo::UserAgent;
-use Mojo::JSON qw(encode_json);
+use Mojo::JSON qw(encode_json decode_json);
 use Mojo::File;
 use Mojo::Util qw(slugify);
 use Mojo::URL;
@@ -11,6 +11,8 @@ use DateTime;
 use utf8;
 
 use Moose;
+
+use feature 'try';
 
 has 'ua' => (
     is => 'ro',
@@ -31,6 +33,31 @@ sub _get_date($d) {
         month => $p[1],
         day => $p[0],
     );
+}
+
+sub available_results($self) {
+    my $res = $self->ua->get($self->base_url.'/races.php?category=1&filter=Filter&s=latest-results')->result;
+    die 'Unable to fetch: '.$res->code
+        unless $res->is_success;
+    my $rows = $res->dom->at('.table-cont table tbody')->find('tr');
+    my %available;
+    $rows->each(sub($row, $n) {
+        my $cols = $row->find('td')->to_array;
+        my ($type, $class) = split '\.', $cols->[2]->text;
+        return unless $class && (
+                $class eq 'UWT'
+                || $class eq '1'
+                || $class eq 'Pro'
+            );
+
+        my ($name, $stage) = split ' \| ', $cols->[1]->at('a')->text;
+        return if $available{$name};
+        my $link = $cols->[1]->at('a')->attr('href');
+        say "fetch info for $name from $link";
+        $link =~ s,/[^/]+?$,/overview,;
+        $available{$name} = $self->race_info($self->base_url.'/'.$link);
+    });
+    return [ values %available ];
 }
 
 sub upcoming($self) {
@@ -98,7 +125,12 @@ sub race_info($self, $race_url) {
     die 'Unable to fetch: '.$ov_res->code
         unless $ov_res->is_success;
     
-    my $infos = $ov_res->dom->at('ul.infolist')->find('li')->to_array;
+    my $info_list = $ov_res->dom->at('ul.infolist');
+    unless ($info_list) {
+        die 'Check out '.$race_url.' - no infos?';
+    }
+    
+    my $infos = $info_list->find('li')->to_array;
     return {
         start_date => $infos->[0]->find('div')->last->text,
         end_date => $infos->[1]->find('div')->last->text,
@@ -108,6 +140,7 @@ sub race_info($self, $race_url) {
 }
 
 sub race_info_stages($self, $race_url) {
+    my ($year) = ($race_url =~ m,/(\d{4})/,);
     my $ov_res = $self->ua->get($race_url)->result;
     die 'Unable to fetch: '.$ov_res->code
         unless $ov_res->is_success;
@@ -120,11 +153,13 @@ sub race_info_stages($self, $race_url) {
     my $stages = [];
     $stages_head->following('.table-cont')->first->find('li')->each(sub($st, $n) {
         my $stage_info = $st->find('div')->to_array;
+        my ($d, $m) = (split '/', $stage_info->[0]->text);
         my ($num, $name) = (split ' \| ', $stage_info->[2]->at('a')->text);
         $num =~ s/Stage //i;
         my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
 
         push $stages->@*, {
+            stage_date => sprintf('%4d-%02d-%02d' => $year, $m, $d),
             num => $n,
             stage => $num,
             name => $name,
@@ -180,8 +215,11 @@ sub results($self, $race_url) {
         stages => [],
     };
     for my $stage (sort { $a->{num} <=> $b->{num} } $stages->@*) {
+        my $ttt = ($stage->{stage} =~ /TTT/) ? 1 : 0;
         say "fetch stage ".$stage->{stage};
-        my $res = $self->results_stage($stage->{link});
+        say " (team time trial, gc only)"
+            if $ttt;
+        my $res = $self->results_stage($stage->{link}, $ttt);
         $stage->{result} = $res->{stage};
         $stage->{gc} = $res->{gc};
         push $results->{stages}->@*, $stage;
@@ -201,16 +239,29 @@ sub results_oneday($self, $results_url) {
     }
 }
 
-sub results_stage($self, $results_url) {
+sub results_stage($self, $results_url, $ttt=0) {
     my $res = $self->ua->get($results_url)->result;
     die 'Unable to fetch: '.$res->code
         unless $res->is_success;
-    my $tables = $res->dom->at('div.content')->find('table.results')->to_array;
+    my $tabs = {};
+    $res->dom->find('ul.restabs li')->each(sub($li, $n) {
+        $tabs->{lc $li->at('a')->text} = $n-1;
+    });
+    $tabs->{gc} = 0 if ($ttt && exists $tabs->{gc});
 
-    return {
-        stage => _parse_result_rows($tables->[0])->to_array,
-        gc => _parse_result_rows($tables->[1])->to_array,
+    my $tables = $res->dom->at('div.content')->find('table.results')->to_array;
+    my $ret = {
+        stage => [],
+        gc => [],
+    };
+
+    if (exists $tabs->{stage}) {
+        $ret->{stage} = _parse_result_rows($tables->[$tabs->{stage}])->to_array;
     }
+    if (exists $tabs->{gc}) {
+        $ret->{gc} = _parse_result_rows($tables->[$tabs->{gc}])->to_array;
+    }
+    return $ret;
 }
 
 sub _parse_result_rows($tbl) {
@@ -247,8 +298,22 @@ sub _parse_result_rows($tbl) {
     });
 }
 
+sub _filename($race_info) {
+    return "data/race-".$race_info->{start_date}."-".slugify($race_info->{race}).".json";
+}
+
+sub read_race($self, $race_info) {
+    no warnings 'experimental';
+    my $race;
+    try {
+        $race = decode_json(Mojo::File->new(_filename($race_info))->slurp);
+    }
+    catch ($e) {}
+    return $race;
+}
+
 sub write_race($self, $race_info) {
-    my $fn = "data/race-".$race_info->{start_date}."-".slugify($race_info->{race}).".json";
+    my $fn = _filename($race_info);
     Mojo::File->new($fn)->spurt(
         encode_json($race_info)
     );
