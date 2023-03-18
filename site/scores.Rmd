@@ -19,14 +19,25 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 
 ```{r load}
 team <- load_team("../data/team-2023.json")
+all_races <- load_races()
 ```
 
 ## Rider Scores
 
 ```{r current_table}
+racedays <- team$riders %>%
+    left_join(all_races$results %>%
+        filter(
+            start_date >= "2023-02-20" &
+            type != "gc"
+        ), by = c("name")) %>%
+    group_by(name) %>%
+    summarise(race_days = sum(!is.na(race)))
+
 team$riders %>%
-    select(name, country, team, cat, age, price, pdc_teams, previous, score) %>%
-    arrange(desc(score), desc(price)) %>%
+    inner_join(racedays) %>%
+    select(name, country, team, cat, age, price, race_days, score) %>%
+    arrange(desc(score), desc(race_days)) %>%
     datatable(
         options = list(
             pageLength = 25,
@@ -123,6 +134,23 @@ team$results %>%
         geom_step() +
         geom_point(aes(size = count)) +
         geom_label(aes(label = race), hjust = "right", nudge_x = -10000)
+```
+
+## All Race Results
+
+```{r all_results, fig.height=10}
+inner_join(
+        team$riders,
+        all_races$results %>% filter(start_date >= "2023-02-20"),
+        by = c("name")) %>%
+    mutate(
+        race_date = coalesce(stage_date,
+            if_else(type == "gc", end_date, start_date))
+    ) %>%
+    ggplot(aes(x = race_date, y = rank)) +
+    geom_point(aes(color = type, size = rank <= 10)) +
+    facet_wrap(~name) +
+    scale_size_manual(values = c(`TRUE` = 3, `FALSE` = 1.2), guide = NULL)
 ```
 
 ## PCS Rider Specialties

@@ -30,19 +30,19 @@ member_highlight_table <- function(dd) {
         )
     ) %>%
     formatStyle("2019", "t2019",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
     ) %>%
     formatStyle("2020", "t2020",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
     ) %>%
     formatStyle("2021", "t2021",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
     ) %>%
     formatStyle("2022", "t2022",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
     ) %>%
     formatStyle("2023", "t2023",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "yellow"))
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
     )
 }
 ```
@@ -56,6 +56,8 @@ all_teams <- bind_rows(lapply(seq(2019, 2023), function(year) {
         mutate(rank = row_number())
     team$riders
 }))
+
+all_races <- load_races()
 
 hist_str <- fromJSON("../data/history.json", simplifyDataFrame = FALSE)
 rider_seasons <- bind_rows(lapply(hist_str, function(hh) {
@@ -182,4 +184,26 @@ rider_seasons %>%
     pivot_wider(names_from = year, values_from = teams) %>%
     inner_join(all_teams %>% select(name, year)) %>%
     member_highlight_table()
+```
+
+## Races this Season
+
+```{r season_table}
+all_races$results %>%
+    filter(rank <= if_else(type == "stage", 3, 15) &
+        start_date >= "2023-02-20") %>%
+    inner_join(all_teams, by = c("name")) %>%
+    mutate(race_date=coalesce(stage_date,
+            if_else(type == "gc", end_date, start_date))) %>%
+    select(race_date, race, type, stage, rank = rank.x, name, year)  %>%
+    arrange(desc(race_date), race, type, rank) %>%
+    pivot_wider(names_from = year, values_from = rank, names_sort = TRUE) %>%
+    mutate(has_current = !is.na(`2023`)) %>%
+    datatable(options = list(
+        pageLength = 25,
+        columnDefs = list(list(targets = "has_current", visible = FALSE))
+    )) %>%
+    formatStyle("has_current", 
+        target = "row", 
+        backgroundColor = styleEqual(c(FALSE, TRUE), c(NA, "lightyellow")))
 ```

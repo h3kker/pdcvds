@@ -27,13 +27,48 @@ load_team <- function(fn) {
 
 load_race <- function(fn) {
     ll <- fromJSON(fn, simplifyVector = FALSE)
-    list(
-        start_list = bind_cols(
-            bind_rows(ll$riders),
+    common_info <- bind_cols(
             race = ll$race,
             start_date = ymd(ll$start_date),
             end_date = ymd(ll$end_date),
             link = ll$link
+    )
+
+    results <- list()
+    if ("stages" %in% names(ll$results)) {
+        results <- bind_rows(
+            bind_cols(common_info, bind_rows(ll$results$final), type = "gc"),
+            bind_rows(lapply(ll$results$stages, function(ss) {
+                bind_cols(
+                    common_info,
+                    bind_rows(ss$result),
+                    stage_date = ymd(ss$stage_date),
+                    stage = ss$stage,
+                    type = "stage"
+                )
+            }))
         )
+    } else {
+        results <- bind_cols(
+            common_info,
+            bind_rows(ll$results$final),
+            type = "oneday"
+        )
+    }
+
+    list(
+        start_list = bind_cols(
+            bind_rows(ll$riders),
+            common_info
+        ),
+        results = results
+    )
+}
+
+load_races <- function() {
+    all_races <- lapply(Sys.glob("../data/race-*.json"), load_race)
+    list(
+        start_lists = bind_rows(lapply(all_races, function(rr) rr$start_list)),
+        results = bind_rows(lapply(all_races, function(rr) rr$results))
     )
 }
