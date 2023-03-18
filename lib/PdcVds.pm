@@ -103,6 +103,8 @@ sub _map_name($self, $name) {
         'Mattias Skjelmose Jensen' => 'Mattias Skjelmose',
         'Carlos Rodriguez' => 'Carlos Rodríguez',
         'Marijn van den Berg' => 'Marijn Van Den Berg',
+        'Mathieu van der Poel' => 'Mathieu Van Der Poel',
+        'Tadej Pogacar' => 'Tadej Pogačar',
     );
     $name_map{$name} || $name;
 }
