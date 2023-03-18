@@ -28,6 +28,9 @@ RUN apt update && \
     r-cran-tidyr \
     r-cran-stringr
 
+RUN R --vanilla -e \
+    "install.packages(c('dplyr', 'ggplot2'), repos='https://cloud.r-project.org')" 
+
 COPY myteam.pl race-info.pl vds-history.pl render.sh watch.json /srv/
 COPY site /srv/site/
 COPY lib /srv/lib/
