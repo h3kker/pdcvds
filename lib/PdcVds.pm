@@ -10,6 +10,9 @@ use Mojo::Promise;
 use DateTime;
 use DateTime::Format::Strptime;
 
+use open ':std', ':encoding(UTF-8)';
+use utf8;
+
 use feature 'try';
 use Moose;
 
@@ -97,6 +100,9 @@ sub login($self) {
 sub _map_name($self, $name) {
     state %name_map = (
         'Sam Watson' => 'Samuel Watson',
+        'Mattias Skjelmose Jensen' => 'Mattias Skjelmose',
+        'Carlos Rodriguez' => 'Carlos Rodríguez',
+        'Marijn van den Berg' => 'Marijn Van Den Berg',
     );
     $name_map{$name} || $name;
 }
