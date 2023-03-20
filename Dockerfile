@@ -29,7 +29,7 @@ RUN apt update && \
     r-cran-stringr
 
 RUN R --vanilla -e \
-    "install.packages(c('dplyr', 'ggplot2'), repos='https://cloud.r-project.org')" 
+    "install.packages(c('dplyr', 'ggplot2', 'DT'), repos='https://cloud.r-project.org')" 
 
 COPY myteam.pl race-info.pl vds-history.pl render.sh watch.json /srv/
 COPY site /srv/site/
