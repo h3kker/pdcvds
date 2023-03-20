@@ -2,6 +2,14 @@ library(dplyr)
 library(jsonlite)
 library(lubridate)
 library(tidyr)
+library(stringr)
+
+race_name_fixups <- c(
+    "GP de Denain Porte du Hainaut" = "Grand Prix de Denain - Porte du Hainaut",
+    "Kuurne - Brussel - Kuurne" = "Kuurne - Bruxelles - Kuurne",
+    "Omloop Het Nieuwsblad" = "Omloop Het Nieuwsblad ME",
+    "Grand Prix Criquelion" = "Grand Prix Criquielion"
+)
 
 load_team <- function(fn) {
     team <- fromJSON(fn)
@@ -11,7 +19,12 @@ load_team <- function(fn) {
             mutate(date = ymd_hms(date), position = as.numeric(position))
     }
     team$results <- team$results %>%
-        mutate(date = ymd_hms(date))
+        mutate(
+            date = ymd_hms(date),
+            pcs_race = coalesce(race_name_fixups[race], race),
+            stage_name = stage,
+            stage=str_extract(stage_name, '^\\d+')
+        )
     team$riders <- team$riders %>% full_join(
         team$specialties %>%
             pivot_longer(!pid, names_to = "spec", values_to = "pcs_score") %>%

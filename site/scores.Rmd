@@ -141,16 +141,21 @@ team$results %>%
 ```{r all_results, fig.height=10}
 inner_join(
         team$riders,
-        all_races$results %>% filter(start_date >= "2023-02-20"),
-        by = c("name")) %>%
+        all_races$results %>% filter(start_date >= "2023-02-20" & !is.na(rank)),
+        by = c("name"), multiple = "all") %>%
+    left_join(
+        team$results %>% select(pcs_race, stage, pid, points),
+        by = c(race = "pcs_race", pid = "pid", stage = "stage")
+    ) %>%
+    replace_na(list(points = 0)) %>%
     mutate(
         race_date = coalesce(stage_date,
             if_else(type == "gc", end_date, start_date))
     ) %>%
     ggplot(aes(x = race_date, y = rank)) +
-    geom_point(aes(color = type, size = rank <= 10)) +
+    geom_point(aes(color = type, size = points)) +
     facet_wrap(~name, ncol = 3) +
-    scale_size_manual(values = c(`TRUE` = 3, `FALSE` = 1.2), guide = NULL)
+    scale_size_binned(range = c(0.1, 6), n.breaks=10)
 ```
 
 ## PCS Rider Specialties
