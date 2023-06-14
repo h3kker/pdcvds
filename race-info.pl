@@ -3,6 +3,8 @@ use lib qw(./lib);
 
 use v5.36;
 
+binmode(STDOUT, ":utf8");
+
 use ProcyclingStats;
 use Getopt::Long;
 
