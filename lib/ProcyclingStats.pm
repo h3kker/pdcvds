@@ -207,7 +207,7 @@ sub results($self, $race_url) {
     my $stages = $self->race_info_stages($race_url);
     unless ($stages) {
         my $results_url = $race_url;
-        $results_url =~ s,/overview,/results,;
+        $results_url =~ s,/overview,/result,;
         return $self->results_oneday($results_url);
     }
     
