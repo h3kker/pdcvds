@@ -175,7 +175,7 @@ sub start_list($self, $race_url) {
     $start_url =~ s,/overview$,,;
     $start_url .= '/startlist';
 
-    my $res = $self->ua->get($start_url.'/riders-ranked')->result;
+    my $res = $self->ua->get($start_url.'/top-competitors')->result;
     die 'Unable to fetch: '.$res->code 
         unless $res->is_success;
     
