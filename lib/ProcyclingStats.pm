@@ -151,19 +151,20 @@ sub race_info_stages($self, $race_url) {
         unless $stages_head;
 
     my $stages = [];
-    $stages_head->following('.table-cont')->first->find('li')->each(sub($st, $n) {
-        my $stage_info = $st->find('div')->to_array;
+    $stages_head->following('.table-cont')->first->find('tr')->each(sub($st, $n) {
+        my $stage_info = $st->find('td')->to_array;
+        return unless scalar $stage_info->@*;
         my ($d, $m) = (split '/', $stage_info->[0]->text);
-        my ($num, $name) = (split ' \| ', $stage_info->[2]->at('a')->text);
+        my ($num, $name) = (split ' to ', $stage_info->[2]->at('a')->text);
         $num =~ s/Stage //i;
-        my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
+        #my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
 
         push $stages->@*, {
             stage_date => sprintf('%4d-%02d-%02d' => $year, $m, $d),
             num => $n,
             stage => $num,
             name => $name,
-            length => $len + 0,
+            length => -1,
             link => $self->base_url.'/'.$stage_info->[2]->at('a')->attr('href'),
         }
     });
@@ -224,6 +225,7 @@ sub results($self, $race_url) {
         $stage->{gc} = $res->{gc};
         push $results->{stages}->@*, $stage;
     }
+    say $race_url;
     $results->{final} = $results->{stages}->[-1]->{gc};
     $results;
 }
@@ -287,11 +289,12 @@ sub _parse_result_rows($tbl) {
         unless ($time) {  # only first row has only text
             $time = $cols->[$idx->{time}]->at('div')->text;
         }
+        my $team = $cols->[$idx->{team}]->at('a');
 
         return {
             rank => $cols->[$idx->{rnk}]->text + 0,
             name => $name,
-            team => $cols->[$idx->{team}]->at('a')->text,
+            team => $team ? $team->text : '-',
             uci_points => ($cols->[$idx->{uci}]->text||0) + 0,
             time => $time,
         }
