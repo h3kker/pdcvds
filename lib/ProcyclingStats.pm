@@ -140,6 +140,7 @@ sub race_info($self, $race_url) {
 }
 
 sub race_info_stages($self, $race_url) {
+say $race_url;
     my ($year) = ($race_url =~ m,/(\d{4})/,);
     my $ov_res = $self->ua->get($race_url)->result;
     die 'Unable to fetch: '.$ov_res->code
@@ -155,7 +156,7 @@ sub race_info_stages($self, $race_url) {
         my $stage_info = $st->find('td')->to_array;
         return unless scalar $stage_info->@*;
         my ($d, $m) = (split '/', $stage_info->[0]->text);
-        my ($num, $name) = (split ' to ', $stage_info->[2]->at('a')->text);
+        my ($num, $name) = (split ' to ', $stage_info->[3]->at('a')->text);
         $num =~ s/Stage //i;
         #my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
 
@@ -165,7 +166,7 @@ sub race_info_stages($self, $race_url) {
             stage => $num,
             name => $name,
             length => -1,
-            link => $self->base_url.'/'.$stage_info->[2]->at('a')->attr('href'),
+            link => $self->base_url.'/'.$stage_info->[3]->at('a')->attr('href'),
         }
     });
     return $stages;
