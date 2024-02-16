@@ -17,14 +17,17 @@ load_team <- function(fn) {
     if (length(team$standings) > 0) {
         team$standings <- team$standings %>%
             mutate(date = ymd_hms(date), position = as.numeric(position))
+
     }
-    team$results <- team$results %>%
-        mutate(
-            date = ymd_hms(date),
-            pcs_race = coalesce(race_name_fixups[race], race),
-            stage_name = stage,
-            stage=str_extract(stage_name, '^\\d+')
-        )
+    if (length(team$results) > 0) {
+        team$results <- team$results %>%
+            mutate(
+                date = ymd_hms(date),
+                pcs_race = coalesce(race_name_fixups[race], race),
+                stage_name = stage,
+                stage=str_extract(stage_name, '^\\d+')
+            )
+    }
     team$riders <- team$riders %>% full_join(
         team$specialties %>%
             pivot_longer(!pid, names_to = "spec", values_to = "pcs_score") %>%
@@ -32,9 +35,9 @@ load_team <- function(fn) {
             mutate(total = sum(pcs_score)) %>%
             slice_max(n = 1, order_by = pcs_score, with_ties = FALSE) %>%
             mutate(spec_rate = round(pcs_score/total*100)) %>%
-            select(pid, spec, spec_rate),
+                select(pid, spec, spec_rate),
         by = c("pid")
-    )
+        )
     team
 }
 
