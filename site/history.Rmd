@@ -246,7 +246,7 @@ season_results %>%
 all_races$results %>%
     filter(rank <= if_else(type == "stage", 3, 15) &
         start_date >= "2023-02-20") %>%
-    inner_join(all_teams, by = c("name"), multiple="all") %>%
+    inner_join(all_teams, by = c("name"), multiple="all", relationship="many-to-many") %>%
     mutate(race_date=coalesce(stage_date,
             if_else(type == "gc", end_date, start_date))) %>%
     select(race_date, race, type, stage, rank = rank.x, name, year)  %>%

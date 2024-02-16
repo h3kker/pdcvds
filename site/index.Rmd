@@ -55,7 +55,7 @@ watched <- start_lists %>%
 
 # Upcoming
 
-```{r calendar, fig.width=12, fig.height=8, dependson=c('load')}
+```{r calendar, fig.width=12, fig.height=8}
 myteam %>%
   ggplot(aes(x = start_date - hours(11), xend = end_date + hours(11),
              y = name, yend = name)) +
@@ -65,7 +65,7 @@ myteam %>%
   scale_alpha_binned(range = c(1, .1), n.breaks = 10)
 ```
 
-```{r upcoming, results="asis", dependson=c('load')}
+```{r upcoming, results="asis"}
 
 races %>%
   group_by(start_date, race) %>%
