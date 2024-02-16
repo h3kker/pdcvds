@@ -54,5 +54,5 @@ for my $cmp_year (2019..2023) {
         });
     }, $riders->@*)->wait;
 }
-Mojo::File->new('data/history.json')->spurt(encode_json $riders);
+Mojo::File->new('data/history.json')->spew(encode_json($riders), 'UTF-8');
 

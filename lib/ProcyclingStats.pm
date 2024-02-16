@@ -318,8 +318,8 @@ sub read_race($self, $race_info) {
 
 sub write_race($self, $race_info) {
     my $fn = _filename($race_info);
-    Mojo::File->new($fn)->spurt(
-        encode_json($race_info)
+    Mojo::File->new($fn)->spew(
+        encode_json($race_info), 'UTF-8'
     );
     return $fn;
 }

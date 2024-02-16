@@ -421,8 +421,8 @@ sub race_info($self, $race_info) {
 }
 
 sub write_team($self) {
-    Mojo::File->new($self->team_file)->spurt(
-        encode_json($self->current_team)
+    Mojo::File->new($self->team_file)->spew(
+        encode_json($self->current_team), 'UTF-8' 
     );
 }
 
