@@ -19,7 +19,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```
 
 ```{r load}
-team <- load_team("../data/team-2023.json")
+team <- load_team("../data/team-2024.json")
 start_lists <- load_races()$start_lists
 
 start_lists <- start_lists %>%
@@ -51,7 +51,7 @@ watched <- start_lists %>%
   ungroup()
 ```
 
-[My Team](https://www.pdcvds.com/myteam.php?mw=1&y=2023)
+[My Team](https://www.pdcvds.com/myteam.php?mw=1&y=2024)
 
 # Upcoming
 
