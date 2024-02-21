@@ -17,7 +17,7 @@ my $pcs = ProcyclingStats->new;
 my $teams = Mojo::Collection->new(
     PdcVds->new->current_team->{riders}
 );
-for my $year (2019..2022) {
+for my $year (2019..2023) {
     my $pdc = PdcVds->new(year => $year);
     if (Mojo::File->new($pdc->team_file)->stat) {
         push $teams->@*, $pdc->current_team->{riders};

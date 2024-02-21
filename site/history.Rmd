@@ -48,8 +48,8 @@ member_highlight_table <- function(dd) {
 ```
 
 ```{r load}
-all_teams <- bind_rows(lapply(seq(2019, 2023), function(year) {
-    team <- load_team(paste("../data/team-", year, ".json", sep = ""))
+all_teams <- bind_rows(lapply(seq(2019, 2024), function(year) {
+    team <- load_team(paste("./data/team-", year, ".json", sep = ""))
     team$riders <- team$riders %>%
         mutate(year = year) %>%
         arrange(desc(score), price) %>%
