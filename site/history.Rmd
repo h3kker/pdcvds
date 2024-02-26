@@ -26,7 +26,7 @@ member_highlight_table <- function(dd) {
         options = list(
             pageLength = 100,
             dom = "ft",
-            columnDefs = list(list(targets = 7:11, visible = FALSE))
+            columnDefs = list(list(targets = 8:13, visible = FALSE))
         )
     ) %>%
     formatStyle("2019", "t2019",
@@ -43,8 +43,10 @@ member_highlight_table <- function(dd) {
     ) %>%
     formatStyle("2023", "t2023",
         backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
-    )
-}
+    ) %>%
+    formatStyle("2024", "t2024",
+        backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
+)}
 ```
 
 ```{r load}
@@ -183,7 +185,7 @@ season_results %>%
     group_by(name, year) %>%
     summarise(points = sum(points)) %>%
     pivot_wider(names_from = year, values_from = points, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2023`)) %>%
+    mutate(has_current = !is.na(`2024`)) %>%
     datatable(options = list(
         pageLength = 50,
         columnDefs = list(list(targets = "has_current", visible = FALSE))
@@ -208,7 +210,7 @@ season_results %>%
         summarise(date = strftime(min(date), "%Y-%m-%d"))) %>%
     arrange(date, race) %>%
     pivot_wider(names_from = year, values_from = points, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2023`)) %>%
+    mutate(has_current = !is.na(`2024`)) %>%
     datatable(options = list(
         pageLength = 25,
         columnDefs = list(list(targets = "has_current", visible = FALSE))
@@ -229,7 +231,7 @@ season_results %>%
         summarise(date = strftime(min(date), "%Y-%m-%d"))) %>%
     arrange(date, race, name) %>%
     pivot_wider(names_from = year, values_from = points, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2023`)) %>%
+    mutate(has_current = !is.na(`2024`)) %>%
     datatable(options = list(
         pageLength = 25,
         columnDefs = list(list(targets = "has_current", visible = FALSE))
@@ -252,7 +254,7 @@ all_races$results %>%
     select(race_date, race, type, stage, rank = rank.x, name, year)  %>%
     arrange(desc(race_date), race, type, rank) %>%
     pivot_wider(names_from = year, values_from = rank, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2023`)) %>%
+    mutate(has_current = !is.na(`2024`)) %>%
     datatable(options = list(
         pageLength = 25,
         columnDefs = list(list(targets = "has_current", visible = FALSE))
