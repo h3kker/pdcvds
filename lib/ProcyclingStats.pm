@@ -319,7 +319,7 @@ sub read_race($self, $race_info) {
 sub write_race($self, $race_info) {
     my $fn = _filename($race_info);
     Mojo::File->new($fn)->spew(
-        encode_json($race_info), 'UTF-8'
+        encode_json($race_info)
     );
     return $fn;
 }

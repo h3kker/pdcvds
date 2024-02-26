@@ -422,7 +422,7 @@ sub race_info($self, $race_info) {
 
 sub write_team($self) {
     Mojo::File->new($self->team_file)->spew(
-        encode_json($self->current_team), 'UTF-8' 
+        encode_json($self->current_team), 
     );
 }
 
