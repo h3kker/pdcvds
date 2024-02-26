@@ -67,7 +67,7 @@ rider_seasons <- bind_rows(lapply(hist_str, function(hh) {
 all_results <- bind_rows(lapply(hist_str, function(hh) {
     lapply(hh$results, bind_cols)
 }))
-season_results <- all_results %>% filter(year(date) == "2023")
+season_results <- all_results %>% filter(year(date) == "2024")
 ```
 
 ## Total Score over Year

@@ -17,7 +17,7 @@ my $pcs = ProcyclingStats->new;
 my $teams = Mojo::Collection->new(
     PdcVds->new->current_team->{riders}
 );
-for my $year (2019..2023) {
+for my $year (2019..2024) {
     my $pdc = PdcVds->new(year => $year);
     if (Mojo::File->new($pdc->team_file)->stat) {
         push $teams->@*, $pdc->current_team->{riders};
@@ -45,7 +45,7 @@ my $riders = $teams->flatten->uniq(sub ($r) { $r->{pid} })->map(sub ($r) {
 });
 
 my $pdc = PdcVds->new;
-for my $cmp_year (2019..2023) {
+for my $cmp_year (2019..2024) {
     say "get compare year $cmp_year";
     my $p = Mojo::Promise->map({ concurrency => 3 }, sub ($r) {
         $pdc->get_rider_info($r->{pid}, $cmp_year)->then(sub ($info) {
