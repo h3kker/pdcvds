@@ -14,19 +14,23 @@ RUN curl -Lo /tmp/bw.zip 'https://vault.bitwarden.com/download/?app=cli&platform
 RUN cpanm --notest -i Mojolicious \
     DateTime \
     DateTime::Format::Strptime \
+    DBD::SQLite \
     Moose && \
     rm -rf ~/.cpanm
 
 RUN apt update && \
     apt install --no-install-recommends -y \
+    sqlite3 libsqlite3-dev \
     r-cran-dplyr \
+    r-cran-dbplyr \
     r-cran-jsonlite \
     r-cran-lubridate \
     r-cran-ggplot2 \
     r-cran-rmarkdown \
     r-cran-dt \
     r-cran-tidyr \
-    r-cran-stringr
+    r-cran-stringr \
+    r-cran-rsqlite
 
 RUN R --vanilla -e \
     "install.packages(c('dplyr', 'ggplot2', 'DT'), repos='https://cloud.r-project.org')" 
