@@ -8,8 +8,8 @@ CREATE TABLE teams (
 );
 CREATE TABLE riders (
     pid int primary key not null, 
-    name text, 
-    dob text not null, 
+    name text not null, 
+    dob text , 
     nationality text,
     spec_gc integer,
     spec_oneday integer,
@@ -19,7 +19,7 @@ CREATE TABLE riders (
 );
 
 CREATE TABLE rider_prices(
-    pid integer,
+    pid integer not null,
     year integer not null,
     price integer not null,
     foreign key (pid) references riders(pid),
@@ -32,34 +32,33 @@ CREATE TABLE races (
     date text
 );
 CREATE TABLE stages(
-    race integer,
+    race integer not null,
     num integer,
     date text,
     foreign key (race)references races(race),
     primary key(race, num)
 );
 CREATE TABLE uci_teams(
-    name text,
-    short text,
-    year integer,
+    name text not null,
+    short text primary key,
     cat text
 );
 CREATE TABLE team_riders(
     year integer,
-    pid integer, 
-    uid integer,
+    pid integer not null, 
+    uid integer not null,
     foreign key(pid)references riders(pid), 
     foreign key (uid) references teams(uid),
     primary key(year, pid, uid)
 
 );
 CREATE TABLE uci_team_riders(
-    year integer,
-    pid integer, 
-    short text, 
+    year integer not null,
+    pid integer not null, 
+    short text not null, 
     foreign key(pid) references riders(pid) 
     foreign key (short) references uci_teams(short),
-    primary key(year, pid, short)
+    primary key(year, pid, short, year)
 );
 CREATE TABLE results(
     type text,
