@@ -18,7 +18,7 @@ use Mojo::File;
 use Mojo::Collection;
 use Mojo::JSON qw(encode_json);
 
-my $pdc = PdcVds->new(year => 2023);
+my $pdc = PdcVds->new(year => $year);
 
 my $races;
 if (scalar $race_links->@*) {
