@@ -59,14 +59,6 @@ has 'base_url' => (
     default => 'https://www.pdcvds.com'
 );
 
-has 'team_file' => (
-    is => 'ro',
-    lazy => 1,
-    default => sub($self) {
-        'data/team-'.$self->year.'.json';
-    },
-);
-
 sub get_current_team($self) {
 my $cur = $self->db->selectrow_arrayref("SELECT uid, name FROM teams WHERE year=? AND mine", undef, $self->year);
     die(" No team for". $self->year) unless defined $cur;
