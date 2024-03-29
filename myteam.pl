@@ -7,9 +7,18 @@ binmode(STDOUT, ":utf8");
 
 use PdcVds;
 use ProcyclingStats;
+use DateTime;
+use Getopt::Long;
+my $year = DateTime->now->year;
+GetOptions(
+    'year=i' => \$year)
+    or die("Usage!");
 
 my $pcs = ProcyclingStats->new;
-my $pdc = PdcVds->new;
+my $pdc = PdcVds->new(year => $year);
+
+$pdc->get_current_team;
+exit;
 
 $pdc->get_riders;
 
@@ -22,4 +31,5 @@ for my $r ($pdc->current_team->{riders}->@*) {
 }
 
 $pdc->get_position;
-$pdc->write_team;
+#$pdc->write_team;
+use Data::Dumper; say Dumper $pdc->current_team;

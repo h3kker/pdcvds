@@ -9,6 +9,8 @@ use Mojo::URL;
 use Mojo::Promise;
 use DateTime;
 use DateTime::Format::Strptime;
+use DBI;
+
 
 use open ':std', ':encoding(UTF-8)';
 use utf8;
@@ -19,7 +21,17 @@ use Moose;
 has 'ua' => (
     is => 'ro',
     default => sub {
-        Mojo::UserAgent->new;
+        my $ua = Mojo::UserAgent->new;
+        $ua->connect_timeout(10);
+        $ua;
+    }
+);
+has 'db' => (
+    is => 'ro',
+    default => sub {
+    my $dbh =  DBI->connect("dbi:SQLite:dbname=test.db","","");
+    $dbh->{AutoCommit} = 1;
+    $dbh;
     }
 );
 
@@ -55,27 +67,20 @@ has 'team_file' => (
     },
 );
 
-has 'current_team' => (
-    is => 'ro',
-    builder => '_read_current',
-    lazy => 1,
-);
+sub get_current_team($self) {
+my $cur = $self->db->selectrow_arrayref("SELECT uid, name FROM teams WHERE year=? AND mine", undef, $self->year);
+    die(" No team for". $self->year) unless defined $cur;
+    $self->current_team_name($cur->[1]);
+    $self->current_uid($cur->[0]);
 
-sub _read_current($self) {
-    no warnings 'experimental';
-    my $team;
-    try {
-        $team = decode_json(Mojo::File->new($self->team_file)->slurp);
-    }
-    catch ($e) {
-        $team = {
-            standings => [],
-            riders => [],
-            scores => [],
-        };
-    }
-    $team;
 }
+
+has 'current_team_name' => (
+    is => 'rw',
+);
+has 'current_uid' => (
+is => 'rw',
+);
 
 sub login($self) {
     return 1
@@ -125,11 +130,11 @@ sub _map_team($team) {
     $team_map{$team} || $team;
 }
 
-sub get_riders($self) {
+sub get_riders($self, $team) {
     $self->login;
-    say "get team...";
-    my $res = $self->ua->get($self->base_url.'/myteam.php?mw=1&y='.$self->year)->result;
-    die 'Could not fetch team: '.$res->code
+    say "get team...".$team;
+    my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year.'&uid='.$team)->result;
+    die 'Could not fetch team'.$team.': '.$res->code
         unless $res->is_success;
     
     my $now = DateTime->now;
@@ -138,10 +143,6 @@ sub get_riders($self) {
     my @results;
 
     my $page = $res->dom;
-
-    if ($page->at('div#content')->at('p')->text =~ m/You don't have a team for/) {
-        die 'NO team in '.$self->year.'?';
-    }
     my $rows = $page->at('div#content table')->children('tr');
     my @info_promises;
     $rows->tail(-1)->head(-1)->each(sub($row, $n) {
@@ -157,24 +158,31 @@ sub get_riders($self) {
             team => $team,
             cat => $cols->[3]->all_text,
             name => _map_name($cols->[4]->at('a')->text),
-            age => $cols->[5]->text,
-            price => $cols->[6]->at('a')->text+0,
-            previous => $cols->[7]->text+0,
-            score => $cols->[8]->text+0,
         };
+        my $have = $self->get_rider($rider_id);
+        use Data::Dumper; say Dumper $have;
         my $p = $self->get_rider_info($rider_id);
         $p->then(sub($info) {
-            say "got rider info for ".$base_info->{name};
-            $base_info->{pdc_teams} = $info->{teams};
-            push @riders, $base_info;
+            say "got rider info from pdcvds for ".$base_info->{name};
+            for my $f (qw{dob price}) {
+            $base_info->{$f} = $info->{$f};
 
-            push @results, $info->{results}->@*;
+            }
+            $self->insert_rider($base_info);    
+            push @riders, $base_info;
+        use Data::Dumper; say Dumper $base_info;
         });
+
+            unless ($have) {
         push @info_promises, $p;
-    });
-    Mojo::Promise->all(@info_promises)->wait;
-    $self->current_team->{riders} = \@riders;
-    $self->current_team->{results} = \@results;
+        }
+    else {
+        push @riders, $have;
+    }
+    Mojo::Promise->all(@info_promises)->wait
+     if scalar @info_promises;
+});
+
     \@riders;
 }
 
@@ -184,14 +192,21 @@ sub get_rider_info($self, $pid, $year=$self->year) {
         pattern => '%d-%b-%Y',
         on_error => 'croak',
     );
+        my $birthday_parser = DateTime::Format::Strptime->new(
+            pattern => '%b %d, %Y',
+            on_error => 'croak',
+
+        );
     return $self->ua->get_p($self->base_url.'/riders.php?mw=1&y='.$year.'&pid='.$pid)
         ->then(sub($tx) {
             my $info = {
                 year => $year,
+                pid => $pid,
                 teams => undef,
                 team => undef,
                 team_short => undef,
                 price => undef,
+                dob => undef,
                 results => [],
             };
             my $res = $tx->result;
@@ -216,6 +231,11 @@ sub get_rider_info($self, $pid, $year=$self->year) {
                         if $team;
                     $info->{team_short} = $team_short
                         if $team_short;
+                }
+                elsif($cols->[0]->text eq 'Birthday' && $cols->[1]->text ne '') {
+                    say $cols->[1]->text;
+                    $info->{dob} = $birthday_parser->parse_datetime($cols->[1]->text)->iso8601;
+
                 }
             });
             my $after_results = $page->at('div#content a[name="results"]');
@@ -253,33 +273,63 @@ sub get_rider_info($self, $pid, $year=$self->year) {
             die 'could not fetch rider info for '.$pid.': '.$err;
         })
 }
+sub get_rider($self, $pid) {
+my $rider = $self->db->selectrow_hashref(qq{
+        SELECT pid, dob, name, nationality, spec_gc, spec_oneday, spec_tt, spec_climber, spec_sprint FROM riders WHERE pid=?},
+undef, $pid);
+$rider;
+}
+sub insert_rider($self, $info) {
+        state  $rider_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO riders(pid, name, nationality, dob) VALUES(?, ?, ?, ?) 
+        }) or die("prepare rider stmt");
+    state $price_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO rider_prices(pid, year, price) VALUES (?, ?, ?)
+    }) or die("prepare price stmt");
+        say "insert rider";
 
-sub get_position($self) {
+            $rider_sth->execute($info->{pid}, $info->{name}, $info->{country}, $info->{dob});
+            say "insert price";
+            $price_sth->execute($info->{pid}, $self->year, $info->{price});
+
+}
+sub get_teams($self) {
+        my $team_riders_sth = $self->db->prepare(qq{
+            INSERT OR REPLACE INTO team_riders(year, pid, uid) VALUES(?, ?, ?)
+        }) or die("prepare team_rider stmt");
     $self->login;
-    say "get position...";
+    my $team_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO teams (uid, name, mine, year) VALUES(?, ?, ?, ?) 
+        });
+    say "get teams...";
+    my $team_count = 0;
+
     my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year)->result;
-    die 'Could not fetch team: '.$res->code
+    die 'Could not fetch teams list: '.$res->code
         unless $res->is_success;
-    
-    my $page = $res->dom;
-    my $rows = $page->at('div#content table')->children('tr')->tail(-1)->to_array;
-    my $cur_pos;
-    my $found = 0;
+        my $page = $res->dom;
+        my $rows = $page->at('div#content table')->children('tr')->tail(-1)->to_array;
     for my $row ($rows->@*) {
         my $cols = $row->children('td')->to_array;
-        $cur_pos = $cols->[0]->text || $cur_pos;
-        if ($cols->[1]->text eq $self->username) {
-            $found = 1;
-            last;
-        }
-    }
-    die 'Could not get current position'
-        unless $found;
+        next unless scalar $cols->@*;
+        my $team_url = Mojo::URL->new($cols->[2]->at('a')->attr('href'));
+        my $team_name = $cols->[2]->at('a')->text;
+        my $username = $cols->[1]->text;
+        my $team_id = $team_url->query->param('uid');
+        say  "$team_name:$team_id";
+        $team_count++;
+            $team_sth->execute($team_id, $team_name, $username eq $self->username, $self->year);
+
+        my $riders = $self->get_riders($team_id);
+            say " got ".scalar $riders->@*." riders";
+            for my $rider($riders->@*) {
+                say "link team rider".$rider->{pid}."+".$team_id;
+                $team_riders_sth->execute($self->year, $rider->{pid}, $team_id);
+
+            }
+    } 
     
-    $cur_pos =~ s/\.$//;
-    push $self->current_team->{standings}->@*,
-        { date => DateTime->now->iso8601, position => $cur_pos};
-    $cur_pos;
+say "got $team_count teams";
 }
 
 sub results_list($self) {
@@ -418,12 +468,6 @@ sub race_info($self, $race_info) {
 
     
 
-}
-
-sub write_team($self) {
-    Mojo::File->new($self->team_file)->spew(
-        encode_json($self->current_team), 
-    );
 }
 
 1;
