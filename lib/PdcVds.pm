@@ -135,8 +135,8 @@ sub get_riders($self, $team) {
     my @results;
 
     my $page = $res->dom;
+    my @to_fetch;
     my $rows = $page->at('div#content table')->children('tr');
-    my @info_promises;
     $rows->tail(-1)->head(-1)->each(sub($row, $n) {
         my $cols = $row->children('td')->to_array;
         my $team = $cols->[2]->at('a')->attr('title');
@@ -152,29 +152,33 @@ sub get_riders($self, $team) {
             name => _map_name($cols->[4]->at('a')->text),
         };
         my $have = $self->get_rider($rider_id);
-        use Data::Dumper; say Dumper $have;
-        my $p = $self->get_rider_info($rider_id);
-        $p->then(sub($info) {
-            say "got rider info from pdcvds for ".$base_info->{name};
-            for my $f (qw{dob price}) {
-            $base_info->{$f} = $info->{$f};
+        unless($have) {
+            say "$rider_id not in db";
+            push @to_fetch, $base_info;
+            
+        }
+        else {
+            say "$rider_id already in db";
+            push @riders, $have;
+        }
+        });
+            say "fetch ".scalar @to_fetch." riders";
+
+        my $p = Mojo::Promise->map({ concurrency => 2}, sub($base_info) {
+            $self->get_rider_info($base_info->{pid})->then(sub($info) {
+                say "got rider info from pdcvds for ".$base_info->{name};
+                for my $f (qw{dob price}) {
+                    $base_info->{$f} = $info->{$f};
 
             }
-            $self->insert_rider($base_info);    
+    use Data::Dumper; say Dumper $base_info;
+                $self->insert_rider($base_info);
             push @riders, $base_info;
-        use Data::Dumper; say Dumper $base_info;
+            $base_info;
+
+
         });
-
-            unless ($have) {
-        push @info_promises, $p;
-        }
-    else {
-        push @riders, $have;
-    }
-    Mojo::Promise->all(@info_promises)->wait
-     if scalar @info_promises;
-});
-
+        }, @to_fetch);
     \@riders;
 }
 
@@ -225,7 +229,6 @@ sub get_rider_info($self, $pid, $year=$self->year) {
                         if $team_short;
                 }
                 elsif($cols->[0]->text eq 'Birthday' && $cols->[1]->text ne '') {
-                    say $cols->[1]->text;
                     $info->{dob} = $birthday_parser->parse_datetime($cols->[1]->text)->iso8601;
 
                 }
@@ -267,8 +270,9 @@ sub get_rider_info($self, $pid, $year=$self->year) {
 }
 sub get_rider($self, $pid) {
 my $rider = $self->db->selectrow_hashref(qq{
-        SELECT pid, dob, name, nationality, spec_gc, spec_oneday, spec_tt, spec_climber, spec_sprint FROM riders WHERE pid=?},
-undef, $pid);
+        SELECT pid, dob, name, nationality, spec_gc, spec_oneday, spec_tt, spec_climber, spec_sprint FROM riders WHERE pid=?
+        AND EXISTS (SELECT * FROM rider_prices rp where rp.pid=riders.pid)
+        }, undef, $pid);
 $rider;
 }
 sub insert_rider($self, $info) {
