@@ -121,8 +121,60 @@ sub _map_team($team) {
     );
     $team_map{$team} || $team;
 }
+sub get_rider_list($self, $page=0) {
+    $self->login;
+    my $url = Mojo::URL->new($self->base_url.'/riders.php')->query({ year => $self->year, mw => 1, n => 0});
+    $url = $url->query({p => $page, n=> undef })
+        if $page;
+    say "get rider list: ".$url;
 
-sub get_riders($self, $team) {
+    my $res = $self->ua->get($url)->result;
+    die 'could not fetch rider list:'.$res->code
+        unless $res->is_success;
+        my @riders;
+        my $page_dom = $res->dom;
+        my $next_page;
+        my $nav = $page_dom->at('div.nav');
+        if ($nav) {
+        for my $nav_link($page_dom->at('div.nav')->find('a')->each) {
+            if ($nav_link->text eq 'next›') {
+                $next_page = Mojo::URL->new($nav_link->attr('href'))->query->param('p');
+
+        }
+
+}
+$self->get_rider_list($next_page) if $next_page;
+}
+    my $rows = $page_dom->at('div#content table.cell')->children('tr');
+    my $insert_uci_team_sth = $self->db->prepare(qq{
+
+    INSERT OR REPLACE INTO uci_teams(name, short, cat, year) VALUES(?, ?, ?, ?);
+    });
+    my $insert_uci_team_riders_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO uci_team_riders(year, pid, short) VALUES(?, ?, ?);
+    });
+        my $update_born_sth = $self->db->prepare(qq{
+            UPDATE riders set born=? WHERE pid=?
+        });
+    $rows->tail(-1)->head(-1)->each(sub($row, $n) {
+        my $cols = $row->children('td')->to_array;
+        my $country = Mojo::URL->new($cols->[1]->at('a')->attr('href'))->query->param('nat');
+        my $team = Mojo::URL->new($cols->[2]->at('a')->attr('href'))->query->param('uci');
+        my $class = $cols->[3]->all_text || '-';
+        my $rider_el = $cols->[4]->at('a');
+        my $born = $cols->[5]->text +0;
+
+        my $rider_id = Mojo::URL->new($rider_el->attr('href'))->query->param('pid');
+        my $rider_name = $rider_el->text;
+        say "$rider_name:$rider_id:$country:$team:$class: $born";
+        $insert_uci_team_sth->execute($team, $team, $class, $self->year);
+        $insert_uci_team_riders_sth->execute($self->year, $rider_id, $team);
+        $update_born_sth->execute($born, $rider_id,);
+
+    });
+}
+
+sub get_riders_for_team($self, $team) {
     $self->login;
     say "get team...".$team;
     my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year.'&uid='.$team)->result;
@@ -137,7 +189,7 @@ sub get_riders($self, $team) {
     my $page = $res->dom;
     my @to_fetch;
     my $rows = $page->at('div#content table')->children('tr');
-    $rows->tail(-1)->head(-1)->each(sub($row, $n) {
+    $rows->tail(-1)->each(sub($row, $n) {
         my $cols = $row->children('td')->to_array;
         my $team = $cols->[2]->at('a')->attr('title');
         $team = _map_team($team);
@@ -178,7 +230,7 @@ sub get_riders($self, $team) {
 
 
         });
-        }, @to_fetch);
+        }, @to_fetch) if scalar @to_fetch;
     \@riders;
 }
 
@@ -271,8 +323,8 @@ sub get_rider_info($self, $pid, $year=$self->year) {
 sub get_rider($self, $pid) {
 my $rider = $self->db->selectrow_hashref(qq{
         SELECT pid, dob, name, nationality, spec_gc, spec_oneday, spec_tt, spec_climber, spec_sprint FROM riders WHERE pid=?
-        AND EXISTS (SELECT * FROM rider_prices rp where rp.pid=riders.pid)
-        }, undef, $pid);
+        AND EXISTS (SELECT * FROM rider_prices rp where rp.pid=riders.pid and rp.year=?)
+        }, undef, $pid, $self->year);
 $rider;
 }
 sub insert_rider($self, $info) {
@@ -316,7 +368,7 @@ sub get_teams($self) {
         $team_count++;
             $team_sth->execute($team_id, $team_name, $username eq $self->username, $self->year);
 
-        my $riders = $self->get_riders($team_id);
+        my $riders = $self->get_riders_for_team($team_id);
             say " got ".scalar $riders->@*." riders";
             for my $rider($riders->@*) {
                 say "link team rider".$rider->{pid}."+".$team_id;
@@ -328,20 +380,21 @@ sub get_teams($self) {
 say "got $team_count teams";
 }
 
-sub results_list($self) {
+sub get_results_list($self) {
+    my $insert_race_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO races(race, name, country) VALUES (?, ?, ?)
+
+    });
     my $res = $self->ua->get($self->base_url.'/results.php?mw=1&y='.$self->year)->result;
     die 'Could not fetch results: '.$res->code
         unless $res->is_success;
     $res->dom->at('div#content table.noevents')->children('tr')->tail(-1)->head(-1)->map(sub ($row) {
         my $tds = $row->find('td')->to_array;
-        my $link = $tds->[4]->at('a')->attr('href');
-        my ($id) = ($link =~ m/event=(\d+)/);
-        return {
-            name => $tds->[4]->at('a')->text,
-            link => $self->base_url.'/results.php'.$link,
-            id => $id,
-        }
-    })->to_array;
+        my $id = Mojo::URL->new($tds->[4]->at('a')->attr('href'))->query->param('event');
+        my $country = Mojo::URL->new($tds->[2]->at('a')->attr('href'))->query->param('country');
+        my $name = $tds->[4]->at('a')->text;
+        $insert_race_sth->execute($id, $name, $country);
+});
 }
 
 sub _parse_race_date($date_str) {
@@ -465,5 +518,4 @@ sub race_info($self, $race_info) {
     
 
 }
-
 1;
