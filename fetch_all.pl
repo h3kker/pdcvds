@@ -16,4 +16,6 @@ GetOptions(
 
 my $pcs = ProcyclingStats->new;
 my $pdc = PdcVds->new(year => $year);
-$pdc->get_teams;
+#$pdc->get_teams;
+#   $pdc->get_rider_list;
+$pdc->get_results_list;
