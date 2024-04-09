@@ -27,18 +27,19 @@ CREATE TABLE rider_prices(
     primary key(pid, year)
     );
 CREATE TABLE races (
-    race integer primary key,
+    event integer primary key,
     name text,
     type text,
     country text,
-    date text
+    start_date text,
+    end_date text
 );
 CREATE TABLE stages(
     race integer not null,
+    stage int primarty key,
     num integer,
     date text,
-    foreign key (race)references races(race),
-    primary key(race, num)
+    foreign key (race)references races(event)
 );
 CREATE TABLE uci_teams(
     name text not null,
@@ -69,8 +70,9 @@ CREATE TABLE results(
     pos integer,
     pid integer not null,
     points integer not null,
-    race integer not null,
+    event integer not null,
     stage integer,
     foreign key(pid) references riders(pid),
-    foreign key(race) references races(race)
+    foreign key(event) references races(event),
+    foreign key(stage) references stages(stage)
 );
