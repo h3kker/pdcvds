@@ -19,3 +19,7 @@ my $pdc = PdcVds->new(year => $year);
 #$pdc->get_teams;
 #   $pdc->get_rider_list;
 $pdc->get_results_list;
+#my $oneday = $pdc->race_info( { event => 36});
+#use Data::Dumper; say Dumper $oneday;
+#my $stage = $pdc->race_info({ event => 506});
+#use Data::Dumper; say Dumper $stage;
