@@ -162,7 +162,7 @@ inner_join(
 
 ```{r specialties}
 tmp_specs <- team$specialties %>%
-    rename(OneDay = "One day races", TT = "Time trial") %>%
+    rename(OneDay = "Onedayraces", TT = "TT") %>%
     rowwise() %>%
     mutate(sum = sum(Climber, GC, Sprint, TT, OneDay)) %>%
     mutate(across(Climber:TT, ~ . / sum))
@@ -170,8 +170,8 @@ tmp_specs <- team$specialties %>%
 team$riders %>%
     select(pid, name, price, spec) %>%
     mutate(spec =
-        if_else(spec == "One day races", "OneDay",
-        if_else(spec == "Time trial", "TT", spec))
+        if_else(spec == "Onedayraces", "OneDay",
+        if_else(spec == "TT", "TT", spec))
     ) %>%
     full_join(tmp_specs) %>%
     arrange(desc(price)) %>%
