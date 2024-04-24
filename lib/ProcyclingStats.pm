@@ -156,6 +156,7 @@ say $race_url;
         my $stage_info = $st->find('td')->to_array;
         return unless scalar $stage_info->@*;
         my ($d, $m) = (split '/', $stage_info->[0]->text);
+        return unless $stage_info->[0]->text;
         my ($num, $name) = (split ' to ', $stage_info->[3]->at('a')->text);
         $num =~ s/Stage //i;
         #my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
