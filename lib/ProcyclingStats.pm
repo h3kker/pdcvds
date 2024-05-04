@@ -157,7 +157,8 @@ say $race_url;
         return unless scalar $stage_info->@*;
         my ($d, $m) = (split '/', $stage_info->[0]->text);
         return unless $stage_info->[0]->text;
-        my ($num, $name) = (split ' to ', $stage_info->[3]->at('a')->text);
+        return unless $stage_info->[3]->at('a');
+        my ($num, $name) = (split ' | ', $stage_info->[3]->at('a')->text);
         $num =~ s/Stage //i;
         #my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
 
