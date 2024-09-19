@@ -9,8 +9,10 @@ use Mojo::Util qw(slugify);
 use Mojo::URL;
 use DateTime;
 use utf8;
-
+use Scalar::Util 'looks_like_number';
+use DateTime::Format::Strptime;
 use Moose;
+use Data::Dumper;
 
 use feature 'try';
 
@@ -26,10 +28,10 @@ has 'base_url' => (
     default => 'https://www.procyclingstats.com',
 );
 
-sub _get_date($d) {
+sub _get_date($d, $year=undef) {
     my @p = split '\.', $d;
     DateTime->new(
-        year => DateTime->now->year,
+        year => $year // DateTime->now->year,
         month => $p[1],
         day => $p[0],
     );
@@ -39,45 +41,62 @@ sub available_results($self) {
     my $res = $self->ua->get($self->base_url.'/races.php?category=1&filter=Filter&s=latest-results')->result;
     die 'Unable to fetch: '.$res->code
         unless $res->is_success;
-    my $rows = $res->dom->at('.table-cont table tbody')->find('tr');
+        my $tbl = $res->dom->at('.table-cont table');
+        my $idx = _indices($tbl);
+    my $rows = $tbl->find('tbody tr');
     my %available;
     $rows->each(sub($row, $n) {
         my $cols = $row->find('td')->to_array;
-        my ($type, $class) = split '\.', $cols->[2]->text;
+        my ($type, $class) = split '\.', $cols->[$idx->{class}]->text;
         return unless $class && (
                 $class eq 'UWT'
                 || $class eq '1'
                 || $class eq 'Pro'
             );
 
-        my ($name, $stage) = split ' \| ', $cols->[1]->at('a')->text;
+        my ($name, $stage) = split ' \| ', $cols->[$idx->{race}]->at('a')->text;
         return if $available{$name};
-        my $link = $cols->[1]->at('a')->attr('href');
-        say "fetch info for $name from $link";
+        my $link = $cols->[$idx->{race}]->at('a')->attr('href');
         $link =~ s,/[^/]+?$,/overview,;
         $available{$name} = $self->race_info($self->base_url.'/'.$link);
     });
     return [ values %available ];
 }
 
+sub _indices($tbl) {
+    my $idx={};
+    $tbl->at('thead')->find('th')->each(sub($hh, $n) {
+        $idx->{lc $hh->text} = $n-1;
+    });
+    #warn Dumper $idx;
+    return $idx;
+}
+
 sub upcoming($self) {
+    say "fetch upcoming";
     my $next_week = DateTime->now->add(weeks => 2);
     
     my $res = $self->ua->get($self->base_url.'/races.php?popular=pro_me&s=upcoming-races')->result;
     die 'Unable to fetch: '.$res->code
         unless $res->is_success;
-    my $rows = $res->dom->at('.table-cont table tbody')->find('tr');
+    my $tbl = $res->dom->at('.table-cont table');
+    my $idx =_indices($tbl);
+    my $rows = $tbl->at('tbody')->find('tr');
     my @races;
     $rows->each(sub($r, $n) {
         my $cols = $r->find('td')->to_array;
-        my @date = split ' - ', $cols->[0]->text;
-        my $start = _get_date($date[0]);
-        return
-            if ($start > $next_week);
+        my $race_col = $cols->[$idx->{name}];
+        my $href = $race_col->at('a')->attr('href');
+        my ($year) = ($href =~ m,/(\d{4})/,);
+        my @date = split ' - ', $cols->[$idx->{date}]->text;
+        my $start = _get_date($date[0], $year);
+        #return
+        #    if ($start > $next_week);
         
         push @races, {
-            race => $cols->[1]->at('a')->text,
-            link => $self->base_url.'/'.$cols->[1]->at('a')->attr('href'),
+            race => $race_col->at('a')->text,
+            start_date => $start->ymd('-'),
+            link => $self->base_url.'/'.$href,
         };
     });
     return \@races;
@@ -121,6 +140,12 @@ sub rider_specialties($self, $name) {
 }
 
 sub race_info($self, $race_url) {
+    $race_url =~ s{/(result|gc)$}{/overview};
+    state $verbose_date = DateTime::Format::Strptime->new(pattern => '%d %b %Y', locale => 'en_US');
+    state $short_date = DateTime::Format::Strptime->new(pattern => '%Y-%m-%d');
+
+
+    say "race_info from $race_url";
     my $ov_res = $self->ua->get($race_url)->result;
     die 'Unable to fetch: '.$ov_res->code
         unless $ov_res->is_success;
@@ -131,16 +156,20 @@ sub race_info($self, $race_url) {
     }
     
     my $infos = $info_list->find('li')->to_array;
+    my $start_date = $infos->[0]->find('div')->last->text;
+    my $end_date = $infos->[1]->find('div')->last->text;
+    $start_date = $short_date->parse_datetime($start_date) || $verbose_date->parse_datetime($start_date);
+    $end_date = $short_date->parse_datetime($end_date) || $verbose_date->parse_datetime($end_date);
     return {
-        start_date => $infos->[0]->find('div')->last->text,
-        end_date => $infos->[1]->find('div')->last->text,
+        start_date => $start_date->ymd('-'),
+        end_date => ($end_date)->ymd('-'),
         race => $ov_res->dom->at('div.main h1')->text,
         link => $race_url,
     }
 }
 
 sub race_info_stages($self, $race_url) {
-say $race_url;
+    say "info stages from $race_url";
     my ($year) = ($race_url =~ m,/(\d{4})/,);
     my $ov_res = $self->ua->get($race_url)->result;
     die 'Unable to fetch: '.$ov_res->code
@@ -152,13 +181,15 @@ say $race_url;
         unless $stages_head;
 
     my $stages = [];
-    $stages_head->following('.table-cont')->first->find('tr')->each(sub($st, $n) {
+    my $tbl = $stages_head->following('.table-cont')->first->at('table');
+    my $idx = _indices($tbl);
+    $tbl->find('tr')->each(sub($st, $n) {
         my $stage_info = $st->find('td')->to_array;
         return unless scalar $stage_info->@*;
-        my ($d, $m) = (split '/', $stage_info->[0]->text);
+        my ($d, $m) = (split '/', $stage_info->[$idx->{date}]->text);
         return unless $stage_info->[0]->text;
-        return unless $stage_info->[3]->at('a');
-        my ($num, $name) = (split ' | ', $stage_info->[3]->at('a')->text);
+        return unless $stage_info->[$idx->{stage}]->at('a');
+        my ($num, $name) = (split ' | ', $stage_info->[$idx->{stage}]->at('a')->text);
         $num =~ s/Stage //i;
         #my $len = $stage_info->[4]->text =~ /(\d+)/ ? $1 : undef;
 
@@ -168,7 +199,7 @@ say $race_url;
             stage => $num,
             name => $name,
             length => -1,
-            link => $self->base_url.'/'.$stage_info->[3]->at('a')->attr('href'),
+            link => $self->base_url.'/'.$stage_info->[$idx->{stage}]->at('a')->attr('href'),
         }
     });
     return $stages;
@@ -178,21 +209,24 @@ sub start_list($self, $race_url) {
     my $start_url = $race_url;
     $start_url =~ s,/overview$,,;
     $start_url .= '/startlist';
-
     my $res = $self->ua->get($start_url.'/top-competitors')->result;
+    say $start_url.'/top-competitors';
     die 'Unable to fetch: '.$res->code 
         unless $res->is_success;
-    
+    my $tbl = $res->dom->at('div.content table.basic');
+    my $idx = _indices($tbl);
     my $list = $res->dom->at('div.content table.basic tbody')->find('tr');
     return $list->map(sub($row) {
         my $cols = $row->find('td')->to_array;
-        my $rank = $cols->[0]->text;
-        my $name = $cols->[1]->at('a')->all_text;
+        return
+            unless defined $cols->[$idx->{rider}];
+        my $rank = $cols->[$idx->{rnk}//$idx->{'pos.'}]->text;
+        my $name = $cols->[$idx->{rider}]->at('a')->all_text;
         return {
             # force name to title case
             name => _transform_name($name),
-            team => $cols->[2]->at('a')->text,
-            rank => $rank + 0,
+            team => $cols->[$idx->{team}]->at('a')->text,
+            rank => looks_like_number $rank ? $rank + 0 : undef,
         };
     });
 }
@@ -210,7 +244,7 @@ sub results($self, $race_url) {
     my $stages = $self->race_info_stages($race_url);
     unless ($stages) {
         my $results_url = $race_url;
-        $results_url =~ s,/overview,/result,;
+        $results_url =~ s|/overview|/result|;
         return $self->results_oneday($results_url);
     }
     
@@ -220,7 +254,7 @@ sub results($self, $race_url) {
     };
     for my $stage (sort { $a->{num} <=> $b->{num} } $stages->@*) {
         my $ttt = ($stage->{stage} =~ /TTT/) ? 1 : 0;
-        say "fetch stage ".$stage->{stage};
+        say "fetch stage ".$stage->{link};
         say " (team time trial, gc only)"
             if $ttt;
         my $res = $self->results_stage($stage->{link}, $ttt);
@@ -228,7 +262,6 @@ sub results($self, $race_url) {
         $stage->{gc} = $res->{gc};
         push $results->{stages}->@*, $stage;
     }
-    say $race_url;
     $results->{final} = $results->{stages}->[-1]->{gc};
     $results;
 }
@@ -270,13 +303,11 @@ sub results_stage($self, $results_url, $ttt=0) {
 }
 
 sub _parse_result_rows($tbl) {
-    my $idx = {};
-    $tbl->at('thead')->find('th')->each(sub($hh, $n) {
-        $idx->{lc $hh->text} = $n-1;
-    });
-
+    my $idx = _indices($tbl);
     $tbl->at('tbody')->find('tr')->map(sub ($row) {
         my $cols = $row->find('td')->to_array;
+        return
+        unless $cols->[$idx->{rider}];
         my $name = _transform_name($cols->[$idx->{rider}]->at('a')->text);
         if ($cols->[$idx->{rnk}]->text =~ /^(DN[FS]|OTL)$/) {
             return {
@@ -298,7 +329,8 @@ sub _parse_result_rows($tbl) {
             rank => $cols->[$idx->{rnk}]->text + 0,
             name => $name,
             team => $team ? $team->text : '-',
-            uci_points => ($cols->[$idx->{uci}]->text||0) + 0,
+            # most tables (except gc results) don't show contain uci points
+            uci_points => defined $idx->{uci} ? ($cols->[$idx->{uci}]->text||0) + 0 : undef,
             time => $time,
         }
     });
@@ -311,10 +343,11 @@ sub _filename($race_info) {
 sub read_race($self, $race_info) {
     no warnings 'experimental';
     my $race;
+    say 'read '._filename($race_info);
     try {
         $race = decode_json(Mojo::File->new(_filename($race_info))->slurp);
     }
-    catch ($e) {}
+    catch ($e) { warn 'not found?'; }
     return $race;
 }
 
