@@ -43,7 +43,7 @@ load_team <- function(fn) {
 
 load_race <- function(fn) {
     ll <- fromJSON(fn, simplifyVector = FALSE)
-    common_info <- bind_cols(
+    common_info <- tibble(
             race = ll$race,
             start_date = ymd(ll$start_date),
             end_date = ymd(ll$end_date),

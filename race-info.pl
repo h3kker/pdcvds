@@ -7,6 +7,7 @@ binmode(STDOUT, ":utf8");
 
 use ProcyclingStats;
 use Getopt::Long;
+use Mojo::JSON 'encode_json';
 
 my $race_links = [];
 my $get_results = 0;
@@ -22,19 +23,19 @@ if (scalar $race_links->@*) {
     $races = [ map { { race => $_, link => $_ } } $race_links->@* ];
 }
 elsif ($get_results) {
-    $races = [ grep {
-        my $i = $pcs->read_race($_);
-        defined $i && !exists $i->{results}
-    } $pcs->available_results->@* ];
-}
+    $races = $pcs->available_results;
+        }
+
 else {
     $races = $pcs->upcoming;
 }
 
 for my $race ($races->@*) {
-    say "fetch info for ".$race->{race};
-    my $info = $pcs->race_info($race->{link});
-    $info->{riders} = $pcs->start_list($race->{link})->to_array;
+    my $info = $pcs->read_race($race);
+    unless ($info) {
+    $info = $pcs->race_info($race->{link});
+    $info->{riders} ||= $pcs->start_list($race->{link})->to_array
+    }
     if ($get_results) {
         $info->{results} = $pcs->results($race->{link});
     }

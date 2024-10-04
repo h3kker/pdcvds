@@ -3,4 +3,9 @@
 pdcvds.html
 data/
 site/_site
+site/*.html
+site/*_files/
+site/*_libs/
 test.db
+test.pl
+.vscode
