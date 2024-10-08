@@ -31,7 +31,7 @@ has 'db' => (
     is => 'ro',
     lazy => 1,
     default => sub {
-        my $dbh =  DBI->connect("dbi:SQLite:dbname=test.db","","");
+        my $dbh =  DBI->connect("dbi:SQLite:dbname=pdcvds.db","","");
         $dbh->{AutoCommit} = 1;
         $dbh;
     }
@@ -100,7 +100,7 @@ has 'insert_price_sth' => (
     lazy => 1,
     default => sub($self){
         $self->db->prepare(qq{
-        SERT OR REPLACE INTO rider_prices(pid, year, price) VALUES (?, ?, ?)
+        INSERT OR REPLACE INTO rider_prices(pid, year, price) VALUES (?, ?, ?)
         });
     }
 );
@@ -284,7 +284,7 @@ sub get_riders_for_team($self, $team) {
     my $page = $res->dom;
     my @to_fetch;
     my $rows = $page->at('div#content table')->children('tr');
-    $rows->tail(-1)->each(sub($row, $n) {
+    $rows->tail(-1)->head(-1)->each(sub($row, $n) {
         my $cols = $row->children('td')->to_array;
         my $team = $cols->[2]->at('a')->attr('title');
         $team = _map_team($team);
