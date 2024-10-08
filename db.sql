@@ -1,22 +1,23 @@
 PRAGMA encoding="UTF-8";
 CREATE TABLE teams (
         uid int not null, 
-    name text, 
-    mine boolean default false,
-    year integer not null,
+        name text, 
+        mine boolean default false,
+        year integer not null,
     primary key (uid, year)
 );
 CREATE TABLE riders (
-    pid int primary key not null, 
+    pid int not null, 
     name text not null, 
-    dob text , 
+    dob text, 
     born integer,
     nationality text,
     spec_gc integer,
     spec_oneday integer,
     spec_tt integer,
     spec_climber integer,
-    spec_sprint integer
+    spec_sprint integer,
+    primary key(pid)
 );
 
 CREATE TABLE rider_prices(
@@ -27,19 +28,21 @@ CREATE TABLE rider_prices(
     primary key(pid, year)
     );
 CREATE TABLE races (
-    event integer primary key,
+    event_id integer ,
     name text,
     type text,
     country text,
     start_date text,
-    end_date text
+    end_date text,
+    primary key (event_id)
 );
 CREATE TABLE stages(
-    race integer not null,
-    stage int primarty key,
+    event_id integer not null,
+    stage_id integer,
     num integer,
     date text,
-    foreign key (race)references races(event)
+    foreign key (event_id) references races(event_id),
+    primary key(stage_id)
 );
 CREATE TABLE uci_teams(
     name text not null,
@@ -63,16 +66,16 @@ CREATE TABLE uci_team_riders(
     short text not null, 
     foreign key(pid) references riders(pid) 
     foreign key (short, year) references uci_teams(short, year),
-    primary key(year, pid, short, year)
+    primary key(year, pid, short)
 );
-CREATE TABLE results(
+CREATE TABLE race_results(
     type text,
     pos integer,
     pid integer not null,
     points integer not null,
-    event integer not null,
-    stage integer,
+    event_id integer not null,
+    stage_id integer,
     foreign key(pid) references riders(pid),
-    foreign key(event) references races(event),
-    foreign key(stage) references stages(stage)
+    foreign key(event_id) references races(event_id),
+    foreign key(stage_id) references stages(stage_id)
 );
