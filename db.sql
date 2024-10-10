@@ -11,13 +11,21 @@ CREATE TABLE riders (
     name text not null, 
     dob text, 
     born integer,
-    nationality text,
+    country text,
+    country_long text,
     spec_gc integer,
     spec_oneday integer,
     spec_tt integer,
     spec_climber integer,
     spec_sprint integer,
     primary key(pid)
+);
+
+CREATE TABLE riders_seen(
+pid int not null,
+year int not null,
+primary key(pid, year),
+foreign key(pid) references riders(pid)
 );
 
 CREATE TABLE rider_prices(
