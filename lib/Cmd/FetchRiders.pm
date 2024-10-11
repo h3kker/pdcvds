@@ -41,7 +41,7 @@ my $process_rider  = sub ($self, $info) {
 sub run($self) {
     my $process = sub($info) { $process_rider->($self, $info )};
     if ($self->full_list) {
-        $self->pdc->get_rider_list;
+        $self->pdc->fetch_rider_list;
     }
     elsif ($self->all_missing) {
         my $missing = $self->pdc->db->selectall_arrayref(qq(
@@ -56,13 +56,13 @@ sub run($self) {
             return;
         }
         my $p = Mojo::Promise->map({ concurrency => 5 }, sub($missing) {
-            return $self->pdc->get_rider_info($missing->{pid})->then($process);
+            return $self->pdc->fetch_rider_info($missing->{pid})->then($process);
         }, $missing->@*)->wait;
 
 
     }
-    elsif( defined $self->pid ) {
-        $self->pdc->get_rider_info($self->pid)->then($process)->wait;
+    elsif(defined $self->pid ) {
+        $self->pdc->fetch_rider_info($self->pid)->then($process)->wait;
     }
     else {
         die 'need pid';

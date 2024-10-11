@@ -15,6 +15,6 @@ option 'refresh' => (
 );
 
 sub run($self) {
-    $self->pdc->get_teams($self->refresh);
+    $self->pdc->fetch_teams($self->refresh);
 }
 true;
