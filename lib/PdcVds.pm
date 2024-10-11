@@ -321,6 +321,10 @@ sub get_rider_info($self, $pid, $year=$self->year) {
         });
 }
 
+sub get_rider($self, $pid) {
+    my $rider = $self->db->selectrow_hashref(q{SELECT * FROM riders WHERE pid=?}, undef, $pid);
+}
+
 sub login($self) {
     return true 
         if $self->is_logged_in;
@@ -340,6 +344,77 @@ sub login($self) {
        unless $res->is_success;
     $self->is_logged_in(true);
 }
+
+sub get_teams($self, $refresh=false) {
+    my $team_count;
+
+    my $team_riders_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO team_riders(year, pid, uid) VALUES(?, ?, ?)
+    }) or die "prepare team_rider stmt";
+
+    my $team_sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO teams (uid, name, mine, year) VALUES(?, ?, ?, ?) 
+    }) or die "prepare team sth";
+
+    my $have_team_sth = $self->db->prepare(qq{SELECT count(*) FROM team_riders WHERE uid=?})
+        or die "prepare have_team_sth";
+
+    my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year)->result;
+    die 'Could not fetch teams list: '.$res->code
+        unless $res->is_success;
+        my $page = $res->dom;
+        my $rows = $page->at('div#content table')->children('tr')->tail(-1)->to_array;
+    for my $row ($rows->@*) {
+        my $cols = $row->children('td')->to_array;
+        next unless scalar $cols->@*;
+        my $team_url = Mojo::URL->new($cols->[2]->at('a')->attr('href'));
+        my $team_name = $cols->[2]->at('a')->text;
+        my $username = $cols->[1]->text;
+        my $team_id = $team_url->query->param('uid');
+        say  "$team_name:$team_id";
+        $team_count++;
+            $team_sth->execute($team_id, $team_name, $username eq $self->username, $self->year);
+            $have_team_sth->execute($team_id);
+            my $have_team = $have_team_sth->fetchrow_arrayref;
+            if ($have_team->[0] > 0) {
+                say "already here, with ".$have_team->[0]."riders.";
+                next unless $refresh;
+            }
+
+my %riders;
+        my $riders = $self->get_riders_for_team($team_id);
+            say " got ".scalar $riders->@*." riders";
+            for my $pid ($riders->@*) {
+                my $rider = $riders{$pid};
+                unless ($rider) {
+                    $rider = $self->get_rider($pid) ||
+                    die 'unknown rider '.$pid.' please to fetch.';
+                    $riders{$pid} = $rider;
+                }
+                say "link team rider ".$rider->{name}."+".$team_name;
+                $team_riders_sth->execute($self->year, $rider, $team_id);
+            }
+    } 
+say "got $team_count teams";
+
+}
+sub get_riders_for_team($self, $team) {
+    $self->login;
+    say "get team...".$team;
+    my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year.'&uid='.$team)->result;
+    die 'Could not fetch team'.$team.': '.$res->code
+        unless $res->is_success;
+    
+    my $page = $res->dom;
+    my $rows = $page->at('div#content table')->children('tr');
+    my $riders = $rows->tail(-1)->head(-1)->map(sub($row) {
+        my $cols = $row->children('td')->to_array;
+        my $rider_url = Mojo::URL->new($cols->[4]->at('a')->attr('href'));
+        my $rider_id = $rider_url->query->param('pid');
+        return $rider_id;
+    });
+    return $riders->to_array;
+    }
 
 sub _map_name($name) {
     state %name_map = (
