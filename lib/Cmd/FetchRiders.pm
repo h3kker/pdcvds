@@ -51,6 +51,10 @@ sub run($self) {
              AND EXISTS (SELECT 1 FROM riders_seen WHERE pid=riders.pid AND year=?)
              ), { Slice => {}}, $self->year);
         say "fetch ".scalar($missing->@*).' promises';
+        unless(scalar $missing->@*) {
+            say "all done!";
+            return;
+        }
         my $p = Mojo::Promise->map({ concurrency => 5 }, sub($missing) {
             return $self->pdc->get_rider_info($missing->{pid})->then($process);
         }, $missing->@*)->wait;

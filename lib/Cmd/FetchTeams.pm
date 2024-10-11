@@ -1,0 +1,20 @@
+package Cmd::FetchTeams;
+
+use MooseX::App::Command;
+
+use PdcVds;
+
+use v5.40;
+
+extends 'Cmd';
+
+option 'refresh' => (
+    is => 'ro',
+    isa => 'Bool',
+    default => false
+);
+
+sub run($self) {
+    $self->pdc->get_teams($self->refresh);
+}
+true;
