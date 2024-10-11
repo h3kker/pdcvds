@@ -230,7 +230,7 @@ has 'current_uid' => (
     is => 'rw',
 );
 
-sub get_rider_list($self) {
+sub fetch_rider_list($self) {
     $self->login;
     my $url = Mojo::URL->new($self->base_url.'/export.php')->query({ y => $self->year, mw => 1});
     my $res = $self->ua->get($url)->result;
@@ -252,7 +252,7 @@ sub get_rider_list($self) {
         if $parser->errstr;
 }
 
-sub get_rider_info($self, $pid, $year=$self->year) {
+sub fetch_rider_info($self, $pid, $year=$self->year) {
     die 'need pid' unless $pid;
     say "get info for ".$pid;
     my $date_parser = DateTime::Format::Strptime->new(
@@ -345,20 +345,8 @@ sub login($self) {
     $self->is_logged_in(true);
 }
 
-sub get_teams($self, $refresh=false) {
-    my $team_count;
-
-    my $team_riders_sth = $self->db->prepare(qq{
-        INSERT OR REPLACE INTO team_riders(year, pid, uid) VALUES(?, ?, ?)
-    }) or die "prepare team_rider stmt";
-
-    my $team_sth = $self->db->prepare(qq{
-        INSERT OR REPLACE INTO teams (uid, name, mine, year) VALUES(?, ?, ?, ?) 
-    }) or die "prepare team sth";
-
-    my $have_team_sth = $self->db->prepare(qq{SELECT count(*) FROM team_riders WHERE uid=?})
-        or die "prepare have_team_sth";
-
+sub fetch_teams($self) {
+    my @teams;
     my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year)->result;
     die 'Could not fetch teams list: '.$res->code
         unless $res->is_success;
@@ -371,34 +359,15 @@ sub get_teams($self, $refresh=false) {
         my $team_name = $cols->[2]->at('a')->text;
         my $username = $cols->[1]->text;
         my $team_id = $team_url->query->param('uid');
-        say  "$team_name:$team_id";
-        $team_count++;
-            $team_sth->execute($team_id, $team_name, $username eq $self->username, $self->year);
-            $have_team_sth->execute($team_id);
-            my $have_team = $have_team_sth->fetchrow_arrayref;
-            if ($have_team->[0] > 0) {
-                say "already here, with ".$have_team->[0]."riders.";
-                next unless $refresh;
-            }
-
-my %riders;
-        my $riders = $self->get_riders_for_team($team_id);
-            say " got ".scalar $riders->@*." riders";
-            for my $pid ($riders->@*) {
-                my $rider = $riders{$pid};
-                unless ($rider) {
-                    $rider = $self->get_rider($pid) ||
-                    die 'unknown rider '.$pid.' please to fetch.';
-                    $riders{$pid} = $rider;
-                }
-                say "link team rider ".$rider->{name}."+".$team_name;
-                $team_riders_sth->execute($self->year, $rider, $team_id);
-            }
-    } 
-say "got $team_count teams";
-
+        push @teams, {
+            uid => $team_id,
+            name => $team_name,
+            mine => $username eq $self->username,
+        };
+    }
+    return \@teams;
 }
-sub get_riders_for_team($self, $team) {
+sub fetch_riders_for_team($self, $team) {
     $self->login;
     say "get team...".$team;
     my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year.'&uid='.$team)->result;

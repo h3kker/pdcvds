@@ -7,7 +7,8 @@ site/*.html
 site/*_files/
 site/*_libs/
 test.db
-test.db.bak
-pdcvds.db
+test.db*
+pdcvds.db*
 test.pl
 .vscode
+*.orig

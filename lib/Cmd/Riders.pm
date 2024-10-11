@@ -1,4 +1,4 @@
-package Cmd::FetchRiders;
+package Cmd::Riders;
 
 use MooseX::App::Command;
 use PdcVds;
