@@ -44,10 +44,24 @@ has 'insert_race_sth' => (
     lazy => true,
     default => sub($self) {
     $self->db->prepare(qq{
-        INSERT OR REPLACE INTO races(event, name, type,country) VALUES (?, ?, ?, ?)
+        INSERT OR REPLACE INTO races(event_id, name, type, country) VALUES (?, ?, ?, ?)
     });
     }
 );
+
+sub insert_race($self, $info) {
+    my $sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO races(event_id, name, type, country) VALUES (?, ?, ?, ?)
+    });
+    $sth->execute($info->{event_id}, $info->{name}, $info->{type}, $info->{country});
+}
+
+sub insert_stage($self, $info) {
+    my $sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO stages(event_id, stage_id, num, date) VALUES (?, ?, ?, ?)
+    });
+    $sth->execute($info->{event_id}, $info->{stage_id}, $info->{stage_num}, $info->{date});
+}
 has 'set_race_date_sth' => (
     is => 'ro',
     lazy => true,
@@ -325,6 +339,10 @@ sub get_rider($self, $pid) {
     my $rider = $self->db->selectrow_hashref(q{SELECT * FROM riders WHERE pid=?}, undef, $pid);
 }
 
+sub get_race($self, $event_id) {
+    my $race = $self->db->selectrow_hashref(q{SELECT * FROM races WHERE event_id=?}, undef, $event_id);
+}
+
 sub login($self) {
     return true 
         if $self->is_logged_in;
@@ -433,8 +451,10 @@ sub fetch_race_list($self) {
         if ($links->@* == 2) {
             $race->{type} = 'stage_race';
             $race->{stage_id} = Mojo::URL->new($links->[1]->attr('href'))->query->param('race');
-            if ($links->[1]->text =~ m/(\d+)\. Stage/) {
-                $race->{stage_num} = $1 + 0;
+            if ($links->[1]->text =~ m/(\d+)\. (Stage|Prologue)\s*(\d*)/) {
+                $race->{stage_num} = $2 eq 'Stage' ? $3 +0 : 0;
+            }
+            else {
             }
         }
         else {
@@ -470,6 +490,11 @@ sub _parse_race_date($date_str) {
 
 }
 
+my %type_map = (
+    'Single-day race' => 'single_day_race',
+    'Stage race' => 'stage_race',
+);
+
 
 sub fetch_race($self, $event_id) {
     my $race_url = Mojo::URL->new($self->base_url.'/results.php')->query({ mw => 1, y=> $self->year, event => $event_id});
@@ -481,11 +506,22 @@ sub fetch_race($self, $event_id) {
             ->following('table.noevents')->first->find('tr')->tail(-1)->each(sub ($row, $n) {
                 my $tds = $row->find('td')->to_array;
                 if ($tds->[0]->text eq 'Type') {
-                    $race_info->{type} = $tds->[1]->text;
+                    $race_info->{type} = $type_map{$tds->[1]->text} //
+                        die 'unknown type '.$tds->[1]->text;
+                }
+                elsif($tds->[0]->text eq 'Category') {
+                    $race_info->{cat} = Mojo::URL->new($tds->[1]->at('a')->attr('href'))->query->param('cat');
+                }
+                elsif($tds->[0]->text eq 'Date' || $tds->[0]->text eq 'First Stage') {
+                    $race_info->{start_date} = _parse_race_date($tds->[1]->text);
+                }
+                elsif($tds->[0]->text eq 'Last Stage') {
+                    $race_info->{end_date} = _parse_race_date($tds->[1]->text);
                 }
 
             });
-
+    $race_info->{end_date} = $race_info->{start_date}
+        if $race_info->{type} eq 'single_day_race';
     return $race_info;
 }
 
@@ -502,7 +538,7 @@ sub fetch_race_info($self, $race_info) {
                     $race_info->{type} = $tds->[1]->text;
                 }
                 # stage race
-                elsif ($tds->[0]->text eq 'First stage') {
+                elsif ($tds->[0]->text eq 'First stage' || $tds->[0]->text eq '') {
                     $race_info->{start_date} = _parse_race_date($tds->[1]->text);
                 }
                  # single day
@@ -560,7 +596,7 @@ sub fetch_race_info($self, $race_info) {
                     name => $stage_name,
                     gc => $results->{gc},
                     result => $results->{result},
-                   jerseys => $results->{jersey},
+                    jerseys => $results->{jersey},
                 };
             });
             $race_info->{results}{final} = $race_info->{results}{stages}[-1]{gc};
