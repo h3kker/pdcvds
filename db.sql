@@ -40,6 +40,7 @@ CREATE TABLE races (
     name text,
     type text,
     country text,
+    category text,
     start_date text,
     end_date text,
     primary key (event_id)
@@ -47,7 +48,7 @@ CREATE TABLE races (
 CREATE TABLE stages(
     event_id integer not null,
     stage_id integer,
-    num integer,
+    num text,
     date text,
     foreign key (event_id) references races(event_id),
     primary key(stage_id)

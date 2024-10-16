@@ -39,21 +39,15 @@ has 'db' => (
         $dbh;
     }
 );
-has 'insert_race_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-    $self->db->prepare(qq{
-        INSERT OR REPLACE INTO races(event_id, name, type, country) VALUES (?, ?, ?, ?)
-    });
-    }
-);
-
-sub insert_race($self, $info) {
-    my $sth = $self->db->prepare(qq{
-        INSERT OR REPLACE INTO races(event_id, name, type, country) VALUES (?, ?, ?, ?)
-    });
-    $sth->execute($info->{event_id}, $info->{name}, $info->{type}, $info->{country});
+sub insert_race($self, $race) {
+    my @cols = qw(event_id name type category start_date end_date country);
+    my $sth = $self->db->prepare(sprintf(q{ INSERT OR REPLACE INTO races(%s) VALUES (%s)} =>
+        join(', ', @cols), 
+        join(', ', map { '?' } @cols )
+        )
+    );
+    say sprintf("insert %s %s" => $race->{type}, $race->{name});
+    $sth->execute(map { $race->{$_}} @cols );
 }
 
 sub insert_stage($self, $info) {
@@ -343,6 +337,10 @@ sub get_race($self, $event_id) {
     my $race = $self->db->selectrow_hashref(q{SELECT * FROM races WHERE event_id=?}, undef, $event_id);
 }
 
+sub get_stages($self, $event_id) {
+    $self->db->selectall_arrayref(q{SELECT * FROM stages WHERE event_id=?}, {Slice => {}}, $event_id);
+}
+
 sub login($self) {
     return true 
         if $self->is_logged_in;
@@ -451,10 +449,12 @@ sub fetch_race_list($self) {
         if ($links->@* == 2) {
             $race->{type} = 'stage_race';
             $race->{stage_id} = Mojo::URL->new($links->[1]->attr('href'))->query->param('race');
-            if ($links->[1]->text =~ m/(\d+)\. (Stage|Prologue)\s*(\d*)/) {
-                $race->{stage_num} = $2 eq 'Stage' ? $3 +0 : 0;
+            if ($links->[1]->text =~ m/(Stage|Prologue)\s*([\dab]*)/) {
+                $race->{stage_num} = $1 eq 'Stage' ? $2 : '00-'.$1;
             }
             else {
+                $race->{stage_num} = 0;
+                warn 'parse: '.$links->[1]->text;
             }
         }
         else {
@@ -522,38 +522,37 @@ sub fetch_race($self, $event_id) {
             });
     $race_info->{end_date} = $race_info->{start_date}
         if $race_info->{type} eq 'single_day_race';
+        # could parse stage table?
     return $race_info;
 }
 
-sub fetch_race_info($self, $race_info) {
-    my $race_url = Mojo::URL->new($self->base_url.'/results.php')->query({ mw => 1, y => $self->year})->query($race_info);
-    my $res = $self->ua->get($race_url)->result;
-    die 'Could not fetch race '.$race_url.': '.$res->code
-        unless $res->is_success;
-        my $tbl_rows = $res->dom->find('h2')->first(sub($e) { $e->text =~/^Results/ })
-            ->following('table.noevents')->first->find('tr')->tail(-1);
-            $tbl_rows->each(sub($row, $n) {
+sub parse_stage_table($res) {
+    die 'I do not work yet';
+            # must be overview page
+            my $stage_table = $res->dom->find('table.noevents')->to_array->[1];
+            my $stages = [];
+            $stage_table->find('tr')->tail(-1)->each(sub ($row, $n) {
                 my $tds = $row->find('td')->to_array;
-                if ($tds->[0]->text eq 'Type') {
-                    $race_info->{type} = $tds->[1]->text;
-                }
-                # stage race
-                elsif ($tds->[0]->text eq 'First stage' || $tds->[0]->text eq '') {
-                    $race_info->{start_date} = _parse_race_date($tds->[1]->text);
-                }
-                 # single day
-                elsif($tds->[0]->text eq 'Date') {
-                    $race_info->{start_date} = _parse_race_date($tds->[1]->text);
-                    $race_info->{end_date} = $race_info->{start_date};
-                }
-                elsif ($tds->[0]->text eq 'Last stage') {
-                    $race_info->{end_date} = _parse_race_date($tds->[1]->text);
-                }
+                my $stage_link = $tds->[1]->at('a');
+                # only a link when there's a result
+                return unless $stage_link;
 
-            });
+                #my $date = _parse_race_date($tds->[0]->text.', '.$self->year);
+                # format is [order].Stage [num]
+                #my ($num, $stage_name) = ($stage_link->text =~ /^(\d+)\. (.+)/);
+                #my $stage_id = Mojo::URL->new($stage_link->attr('href'))->query->param('race');
 
-    $self->set_race_date_sth->execute($race_info->{start_date}, $race_info->{end_date}, $race_info->{event});
-    $self->set_race_type_sth->execute($race_info->{type}, $race_info->{event});
+    });
+    return $stages;
+}
+
+sub fetch_results($self, $race) {
+    my $_do_fetch = sub($url) {
+        my $res = $self->ua->get($url)->result;
+        die 'Could not fetch results '.$url.': '.$res->code
+            unless $res->is_success;
+        return $res;
+    };
     my $parse_result_row = sub($row, $type) {
         my $tds = $row->find('td')->to_array;
         my $pos = $tds->[0]->text;
@@ -566,50 +565,15 @@ sub fetch_race_info($self, $race_info) {
             type => $type,
         };
     };
-    
-    if ($race_info->{type} eq 'single-day race') {
-        $race_info->{results} = { final => $res->dom->find('h3')->first(sub($e) { $e->text eq 'Results'})
-            ->following('table.noevents')->first->find('tr')->tail(-1)->head(-1)->map(sub ($row) {
-                $parse_result_row->($row, 'oneday');
-            })->to_array };
-        return $race_info;
-    }
-    else {
+    my $url = Mojo::URL->new($self->base_url.'/results.php')->query({ mw => 1, y=> $self->year});
+    if ($race->{stage_id}) {
+        $url->query->merge(race => $race->{stage_id});
+        my $res = $_do_fetch->($url);
         my $head = $res->dom->find('h3')->first(sub($e) { $e->text =~ /^Stage/ });
-        $race_info->{results} = {};
-        unless ($head) {
-            # must be overview page
-            my $stage_table = $res->dom->find('table.noevents')->to_array->[1];
-            $race_info->{results}{stages} = [];
-            $stage_table->find('tr')->tail(-1)->each(sub ($row, $n) {
-                my $tds = $row->find('td')->to_array;
-                my $stage_link = $tds->[1]->at('a');
-                return unless $stage_link;
-
-                my $date = _parse_race_date($tds->[0]->text.', '.$self->year);
-                my ($num, $stage_name) = ($stage_link->text =~ /^(\d+)\. (.+)/);
-                my $stage_id = Mojo::URL->new($stage_link->attr('href'))->query->param('race');
-                my $results = $self->race_info({ race => $stage_id });
-                push $race_info->{results}{stages}->@*, {
-                    stage_date => $date,
-                    stage => $num,
-                    name => $stage_name,
-                    gc => $results->{gc},
-                    result => $results->{result},
-                    jerseys => $results->{jersey},
-                };
-            });
-            $race_info->{results}{final} = $race_info->{results}{stages}[-1]{gc};
-            $race_info->{results}{final_jerseys} = $race_info->{results}{stages}[-1]{jerseys};
-            return $race_info;
-        }
-
+        die 'no results at '.$url
+            unless $head;
         my $state;
-        my $results = {
-            result => [],
-            jersey => [],
-            gc => [],
-        };
+        my $results = [];
         $head->following('table.noevents')->first->find('tr')->each(sub($row, $n) {
             my $heads = $row->find('th')->to_array;
             if (scalar $heads->@* == 2) {
@@ -626,21 +590,30 @@ sub fetch_race_info($self, $race_info) {
                     $state = 'jersey';
                 }
                 else {
-                    die 'Unexpected: '.$heads->[1]->text.' on '.$race_info->{link};
+                    die 'Unexpected: '.$heads->[1]->text.' on '.$url;
                 }
-                return;
             }
-            return if (($row->attr('class')//'') eq 'lite') ||
-                $row->find('td')->size == 1;
-            
-            push $results->{$state}->@*, $parse_result_row->($row, $state);
+            else {
+                return 
+                    if (($row->attr('class')//'') eq 'lite') || $row->find('td')->size == 1;
+                push $results->@*, $parse_result_row->($row, $state);   
+            }
         });
-        return $results;
+    return $results;
     }
-    
-
-    
-
+    elsif ($race->{event_id}) {
+        $url->query->merge(event => $race->{event_id});
+        my $res = $_do_fetch->($url);
+        my $results_table = $res->dom->find('h3')->first(sub($e) { $e->text eq 'Results'})->following('table.noevents')->first;
+        die 'no result for '.$url
+            unless $results_table;
+        return $results_table->find('tr')->tail(-1)->head(-1)->map(sub ($row) {
+                $parse_result_row->($row, 'single_day_race');
+            })->to_array;
+    }
+    else {
+        die 'need stage_id or event_id';
+    }
 }
 
 true;
