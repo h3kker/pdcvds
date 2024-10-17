@@ -43,15 +43,17 @@ CREATE TABLE races (
     category text,
     start_date text,
     end_date text,
-    primary key (event_id)
+    year integer not null,
+    primary key (event_id, year)
 );
 CREATE TABLE stages(
     event_id integer not null,
-    stage_id integer,
+    stage_id integer not null,
     num text,
     date text,
-    foreign key (event_id) references races(event_id),
-    primary key(stage_id)
+    year integer not null,
+    foreign key (event_id, year) references races(event_id, year),
+    primary key(stage_id, year)
 );
 CREATE TABLE uci_teams(
     name text not null,
@@ -84,7 +86,9 @@ CREATE TABLE race_results(
     points integer not null,
     event_id integer not null,
     stage_id integer,
+    year integer not null,
     foreign key(pid) references riders(pid),
-    foreign key(event_id) references races(event_id),
-    foreign key(stage_id) references stages(stage_id)
+    foreign key(event_id, year) references races(event_id, year),
+    foreign key(stage_id, year) references stages(stage_id, year)
+    primary key(type, pos, event_id, stage_id)
 );

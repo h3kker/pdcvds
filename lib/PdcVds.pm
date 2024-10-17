@@ -39,63 +39,33 @@ has 'db' => (
         $dbh;
     }
 );
+
+sub _gen_insert($self, $table, $cols, $info) {
+    my $sth = $self->db->prepare(sprintf(q{ INSERT OR REPLACE INTO %s(%s) VALUES (%s)} =>
+        $table,
+        join(', ', $cols->@*), 
+        join(', ', map { '?' } $cols->@* )
+    )
+);
+    $sth->execute(map { $info->{$_}} $cols->@* );
+
+}
 sub insert_race($self, $race) {
-    my @cols = qw(event_id name type category start_date end_date country);
-    my $sth = $self->db->prepare(sprintf(q{ INSERT OR REPLACE INTO races(%s) VALUES (%s)} =>
-        join(', ', @cols), 
-        join(', ', map { '?' } @cols )
-        )
-    );
+    my @cols = qw(event_id name type category start_date end_date country year);
     say sprintf("insert %s %s" => $race->{type}, $race->{name});
-    $sth->execute(map { $race->{$_}} @cols );
+    $self->_gen_insert('races', \@cols, $race);
 }
 
-sub insert_stage($self, $info) {
-    my $sth = $self->db->prepare(qq{
-        INSERT OR REPLACE INTO stages(event_id, stage_id, num, date) VALUES (?, ?, ?, ?)
-    });
-    $sth->execute($info->{event_id}, $info->{stage_id}, $info->{stage_num}, $info->{date});
+sub insert_stage($self, $stage) {
+    my @cols = qw(event_id stage_id num year);
+    $self->_gen_insert('stages', \@cols, $stage);
 }
-has 'set_race_date_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-                UPDATE races SET start_date = ?, end_date = ? WHERE event = ?
 
-        });
-    }
-);
-has 'set_race_type_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-                UPDATE races SET type = ? WHERE event = ?
+    sub insert_result($self, $result) {
+    my @cols = qw(type pos pid points event_id stage_id year);
+    $self->_gen_insert('race_results', \@cols, $result);
+}
 
-        });
-    }
-);
-has 'insert_stage_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-        INSERT OR REPLACE INTO stages(race, stage, num, date) VALUES (?, ?, ?,?)
-        });
-    }
-
-);
-has 'insert_result_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self){
-        $self->db->prepare(qq{
-        INSERT OR REPLACE INTO results(type, pos, pid, points, event, stage) VALUES(?, ?, ?, ?, ?, ?)
-        });
-    }
-
-);
 has 'insert_rider_basic_sth' => (
     is => 'ro',
     lazy => true,
@@ -333,12 +303,12 @@ sub get_rider($self, $pid) {
     my $rider = $self->db->selectrow_hashref(q{SELECT * FROM riders WHERE pid=?}, undef, $pid);
 }
 
-sub get_race($self, $event_id) {
-    my $race = $self->db->selectrow_hashref(q{SELECT * FROM races WHERE event_id=?}, undef, $event_id);
+sub get_race($self, $event_id, $year=$self->year) {
+    my $race = $self->db->selectrow_hashref(q{SELECT * FROM races WHERE event_id=? AND year=?}, undef, $event_id, $year);
 }
 
-sub get_stages($self, $event_id) {
-    $self->db->selectall_arrayref(q{SELECT * FROM stages WHERE event_id=?}, {Slice => {}}, $event_id);
+sub get_stages($self, $event_id, $year=$self->year) {
+    $self->db->selectall_arrayref(q{SELECT * FROM stages WHERE event_id=? AND year=?}, {Slice => {}}, $event_id, $year);
 }
 
 sub login($self) {
@@ -439,6 +409,7 @@ sub fetch_race_list($self) {
             name => undef,
             event_id => undef,
             country => undef,
+            year => $self->year,
         };
         my $tds = $row->find('td')->to_array;
         my $links = $tds->[4]->find('a')->to_array;
@@ -450,10 +421,10 @@ sub fetch_race_list($self) {
             $race->{type} = 'stage_race';
             $race->{stage_id} = Mojo::URL->new($links->[1]->attr('href'))->query->param('race');
             if ($links->[1]->text =~ m/(Stage|Prologue)\s*([\dab]*)/) {
-                $race->{stage_num} = $1 eq 'Stage' ? $2 : '00-'.$1;
+                $race->{num} = $1 eq 'Stage' ? $2 : '00-'.$1;
             }
             else {
-                $race->{stage_num} = 0;
+                $race->{num} = 0;
                 warn 'parse: '.$links->[1]->text;
             }
         }
@@ -461,8 +432,6 @@ sub fetch_race_list($self) {
             $race->{type} = 'single_day_race';
         }
         return $race;
-        #$self->insert_race_sth->execute($id, $name, $type, $country);
-        #$self->insert_stage_sth->execute($id, $stage_id, $stage_num, undef);
     });
     my %races;
     for my $race ($races->@*) {
@@ -501,7 +470,7 @@ sub fetch_race($self, $event_id) {
     my $res = $self->ua->get($race_url)->result;
     die 'Could not fetch race '.$race_url.': '.$res->code
         unless $res->is_success;
-        my $race_info;
+        my $race_info = { year => $self->year };
         $res->dom->find('h2')->first(sub($e) { $e->text =~ /^Results/ })
             ->following('table.noevents')->first->find('tr')->tail(-1)->each(sub ($row, $n) {
                 my $tds = $row->find('td')->to_array;
@@ -555,14 +524,17 @@ sub fetch_results($self, $race) {
     };
     my $parse_result_row = sub($row, $type) {
         my $tds = $row->find('td')->to_array;
+        die 'no td? in '.$row
+        unless $tds->@*;
         my $pos = $tds->[0]->text;
         $pos =~ tr/\. //d;
         return {
-            rank => $pos+0,
+            pos => $pos+0,
             pid => Mojo::URL->new($tds->[3]->at('a')->attr('href'))->query->param('pid'),
             name => _map_name($tds->[3]->at('a')->text),
             points => $tds->[4]->text+0,
             type => $type,
+            year => $self->year,
         };
     };
     my $url = Mojo::URL->new($self->base_url.'/results.php')->query({ mw => 1, y=> $self->year});
@@ -572,13 +544,13 @@ sub fetch_results($self, $race) {
         my $head = $res->dom->find('h3')->first(sub($e) { $e->text =~ /^Stage/ });
         die 'no results at '.$url
             unless $head;
-        my $state;
+        my $state = 'stage';
         my $results = [];
         $head->following('table.noevents')->first->find('tr')->each(sub($row, $n) {
             my $heads = $row->find('th')->to_array;
             if (scalar $heads->@* == 2) {
                 if ($heads->[1]->text =~ /^Placing/) {
-                    $state = 'result';
+                    $state = 'stage';
                 }
                 elsif ($heads->[1]->text =~ /^Intermediate/) {
                     $state = 'jersey';
@@ -595,7 +567,7 @@ sub fetch_results($self, $race) {
             }
             else {
                 return 
-                    if (($row->attr('class')//'') eq 'lite') || $row->find('td')->size == 1;
+                    if (($row->attr('class')//'') eq 'lite') || $row->find('td')->size <= 1;
                 push $results->@*, $parse_result_row->($row, $state);   
             }
         });

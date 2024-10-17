@@ -32,11 +32,11 @@ sub run($self) {
             my $event = $self->pdc->get_race($race->{event_id});
             unless($event && $event->{type} && $event->{start_date}) {
                 my $details = $self->pdc->fetch_race($race->{event_id});
-                $race->{$_} = $details->{$_} for qw(type category start_date end_date);
+                $race->{$_} = $details->{$_} for qw(type category start_date end_date year);
             $self->pdc->insert_race($race);
             }
             for my $stage ($race->{stages}->@*) {
-                say sprintf(" insert %s stage %s " => $race->{name}, $stage->{stage_num});
+                say sprintf(" insert %s stage %s " => $race->{name}, $stage->{num});
                 $self->pdc->insert_stage($stage);
             }
         }
@@ -48,11 +48,22 @@ sub run($self) {
         my $race = $self->pdc->get_race($self->event_id) || die 'no such race';
         if ($race->{type} eq 'stage_race') {
             my $stages = $self->pdc->get_stages($self->event_id);
-            say encode_json $stages;
-            say encode_json $self->pdc->fetch_results($stages->[4]);
+            for my $stage ($stages->@*) {
+                say "get results for stage ".$stage->{num};
+                my $results = $self->pdc->fetch_results($stage);
+                for my $result ($results->@*) {
+                    $result->{stage_id} = $stage->{stage_id};
+                    $result->{event_id} = $race->{event_id};
+                    $self->pdc->insert_result($result);
+                }
+            }
         }
         else {
-            say encode_json $self->pdc->fetch_results($race);
+            my $results = $self->pdc->fetch_results($race);
+            for my $result ($results->@*) {
+                $result->{event_id} = $race->{event_id};
+                $self->pdc->insert_result($result);
+            }
         }
     }
 }
