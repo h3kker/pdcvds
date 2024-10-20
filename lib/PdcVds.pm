@@ -34,8 +34,11 @@ has 'db' => (
     is => 'ro',
     lazy => true,
     default => sub {
-        my $dbh =  DBI->connect("dbi:SQLite:dbname=pdcvds.db","","");
+        my $dbh = DBI->connect("dbi:SQLite:dbname=pdcvds.db","","");
+        $dbh->do('PRAGMA foreign_keys = ON');
+        $dbh->do('PRAGMA encoding="UTF-8"');
         $dbh->{AutoCommit} = 1;
+        $dbh->{RaiseError} = 1;
         $dbh;
     }
 );
@@ -54,10 +57,16 @@ sub insert_race($self, $race) {
     my @cols = qw(event_id name type category start_date end_date country year);
     say sprintf("insert %s %s" => $race->{type}, $race->{name});
     $self->_gen_insert('races', \@cols, $race);
+    if ($race->{type} eq 'stage_race') {
+            for my $stage ($race->{stages}->@*) {
+                say sprintf(" insert %s stage %s " => $race->{name}, $stage->{num});
+                $self->insert_stage($stage);
+            }
+    }
 }
 
 sub insert_stage($self, $stage) {
-    my @cols = qw(event_id stage_id num year);
+    my @cols = qw(event_id stage_id num year date);
     $self->_gen_insert('stages', \@cols, $stage);
 }
 
@@ -66,73 +75,13 @@ sub insert_stage($self, $stage) {
     $self->_gen_insert('race_results', \@cols, $result);
 }
 
-has 'insert_rider_basic_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-        INSERT OR REPLACE INTO riders(pid, name, country) VALUES(?, ?, ?) 
-        });
-    }
-);
-has 'insert_price_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self){
-        $self->db->prepare(qq{
-        INSERT OR REPLACE INTO rider_prices(pid, year, price) VALUES (?, ?, ?)
-        });
-    }
-);
-    has 'insert_uci_team_sth' => (
-        is => 'ro',
-        lazy => true,
-        default => sub($self) {
-    $self->db->prepare(qq{
-        INSERT OR REPLACE INTO uci_teams(name, short, cat, year) VALUES(?, ?, ?, ?)
-        });
-    }
-
-);
-has 'insert_uci_team_riders_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-        INSERT OR REPLACE INTO uci_team_riders(year, pid, short) VALUES(?, ?, ?);
-
-        });
-
-    }
-
-);
-has 'insert_rider_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-        INSERT OR REPLACE INTO riders(pid, name, country, country_long, dob) VALUES(?, ?, ?, ?, ?) 
-        });
-    }
-);
-has 'set_rider_seen_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-            INSERT OR REPLACE INTO riders_seen(pid, year) VALUES(?, ?)});
-    }
-);
-has 'delete_rider_seen_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
-            DELETE FROM riders_seen WHERE pid=? AND year=?});
-    }
-);
+sub insert_team($self, $team) {
+    my @cols = qw(uid name mine year);
+    $self->_gen_insert('teams', \@cols, $team);
+}
 
 sub insert_rider($self, $info) {
+    my @cols = qw(pid name country country_long dob);
     croak "need pid"
         unless $info->{pid};
     if(!defined $info->{name}) {
@@ -140,40 +89,44 @@ sub insert_rider($self, $info) {
         $info->{name} = $info->{first_name}.' '.$info->{last_name}
     }
     else {
-        $self->delete_rider_seen_sth->execute($info->{pid}, $self->year);
+        $self->delete_rider_seen($info->{pid}, $self->year);
         return false;
     }
 }
-    $self->insert_rider_sth->execute($info->{pid}, $info->{name}, $info->{country}, $info->{country_long}, $info->{dob});
-    $self->set_rider_seen_sth->execute($info->{pid}, $self->year);
+@cols = grep { exists $info->{$_} } @cols;
+$self->_gen_insert('riders', \@cols, $info);
+$self->set_rider_seen($info->{pid}, $self->year);
     return true;
 }
 
-    has 'insert_uci_team_sth' => (
-        is => 'ro',
-        lazy => true,
-        default => sub($self) {
-    $self->db->prepare(qq{
-    INSERT OR REPLACE INTO uci_teams(name, short, cat, year) VALUES(?, ?, ?, ?);
-    });
-        }
-);
-sub insert_uci_team ($self, $name, $short, $cat, $year) {
-    $self->insert_uci_team_sth->execute($name, $short, $cat, $year);
-
+sub set_rider_seen($self, $pid, $year=$self->year) {
+    my $sth = $self->db->prepare(qq{INSERT OR REPLACE INTO riders_seen(pid, year) VALUES(?, ?)});
+    $sth->execute($pid, $year);
 }
 
-has 'insert_uci_team_riders_sth' => (
-    is => 'ro',
-    lazy => true,
-    default => sub($self) {
-        $self->db->prepare(qq{
+sub insert_rider_price($self, $pid, $price, $year=$self->year) {
+my $sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO rider_prices(pid, year, price) VALUES (?, ?, ?)
+        });
+    $sth->execute($pid, $year, $price);
+}
+
+sub delete_rider_seen($self, $pid, $year=$self->year) {
+    my $sth = $self->db->prepare(qq{DELETE FROM riders_seen WHERE pid=? AND year=?});
+    $sth->execute($pid, $year);
+}
+
+
+sub insert_uci_team ($self, $team) {
+    my @cols = qw(name short cat year);
+    $self->_gen_insert('uci_teams', \@cols, $team);
+}
+
+sub link_uci_team_rider($self, $short, $pid, $year=$self->year) {
+    my $sth = $self->db->prepare(qq{
         INSERT OR REPLACE INTO uci_team_riders(year, pid, short) VALUES(?, ?, ?);
         });
-    }
-);
-sub insert_uci_team_rider($self, $year, $pid, $short) {
-    $self->insert_uci_team_riders_sth->execute($year, $pid, $short);
+    $sth->execute($year, $pid, $short);
 }
 
 
@@ -210,6 +163,7 @@ has 'current_uid' => (
 
 sub fetch_rider_list($self) {
     $self->login;
+    my @riders;
     my $url = Mojo::URL->new($self->base_url.'/export.php')->query({ y => $self->year, mw => 1});
     my $res = $self->ua->get($url)->result;
     die 'Could not fetch export: '.$res->code
@@ -220,14 +174,19 @@ sub fetch_rider_list($self) {
         file => $tmpname,
         names => true,
     );
-    while(my $info = $parser->fetch) {
-        $self->insert_rider_basic_sth->execute($info->{'rider id'}, $info->{'rider name'}, $info->{'country'})
-            || die 'insert '.$info->{'rider id'};
-        $self->set_rider_seen_sth->execute($info->{'rider id'}, $self->year);
-        $self->insert_price_sth->execute($info->{'rider id'}, $self->year, $info->{price});
+    while(my $row = $parser->fetch) {
+        push @riders, {
+            pid => $row->{'rider id'},
+            name => $row->{'rider name'},
+            country => $row->{'country'},
+            price => $row->{'price'},
+
+        };
     }
     die $parser->errstr
         if $parser->errstr;
+
+    return @riders;
 }
 
 sub fetch_rider_info($self, $pid, $year=$self->year) {
@@ -311,6 +270,21 @@ sub get_stages($self, $event_id, $year=$self->year) {
     $self->db->selectall_arrayref(q{SELECT * FROM stages WHERE event_id=? AND year=?}, {Slice => {}}, $event_id, $year);
 }
 
+sub get_team($self, $uid, $year=$self->year) {
+    $self->db->selectrow_hashref(q{
+    SELECT *, (
+        SELECT count(*) FROM team_riders WHERE team_riders.uid=teams.uid 
+        ) rider_count FROM teams WHERE uid=? AND year=?}, undef, $uid, $year);
+}
+
+sub link_team_rider($self, $uid, $pid, $year=$self->year) {
+    my $sth = $self->db->prepare(qq{
+        INSERT OR REPLACE INTO team_riders(year, pid, uid) VALUES(?, ?, ?)
+    });
+    $sth->execute($year, $pid, $uid);
+
+}
+
 sub login($self) {
     return true 
         if $self->is_logged_in;
@@ -349,6 +323,7 @@ sub fetch_teams($self) {
             uid => $team_id,
             name => $team_name,
             mine => $username eq $self->username,
+            year => $self->year,
         };
     }
     return \@teams;
@@ -356,7 +331,8 @@ sub fetch_teams($self) {
 sub fetch_riders_for_team($self, $team) {
     $self->login;
     say "get team...".$team;
-    my $res = $self->ua->get($self->base_url.'/teams.php?mw=1&y='.$self->year.'&uid='.$team)->result;
+    return $self->ua->get_p($self->base_url.'/teams.php?mw=1&y='.$self->year.'&uid='.$team)->then(sub($tx) {
+        my $res = $tx->result;
     die 'Could not fetch team'.$team.': '.$res->code
         unless $res->is_success;
     
@@ -369,7 +345,8 @@ sub fetch_riders_for_team($self, $team) {
         return $rider_id;
     });
     return $riders->to_array;
-    }
+    });
+}
 
 sub _map_name($name) {
     state %name_map = (
@@ -420,13 +397,7 @@ sub fetch_race_list($self) {
         if ($links->@* == 2) {
             $race->{type} = 'stage_race';
             $race->{stage_id} = Mojo::URL->new($links->[1]->attr('href'))->query->param('race');
-            if ($links->[1]->text =~ m/(Stage|Prologue)\s*([\dab]*)/) {
-                $race->{num} = $1 eq 'Stage' ? $2 : '00-'.$1;
-            }
-            else {
-                $race->{num} = 0;
-                warn 'parse: '.$links->[1]->text;
-            }
+            $race->{num} = _parse_stage_text($links->[1]->text);
         }
         else {
             $race->{type} = 'single_day_race';
@@ -454,9 +425,20 @@ sub _parse_race_date($date_str) {
         return $date_parser->parse_datetime(sprintf "%d-%s-%d" => $2, $1, $3)->ymd('-');
     }
     else {
-        die 'Unable to parse date: '.$date_str->text;
+        die 'Unable to parse date: '.$date_str;
     }
 
+}
+
+sub _parse_stage_text($text) {
+    # format is [order].Stage [num]
+    if ($text =~ m/(Stage|Prologue)\s*([\dab]*)/) {
+        return $1 eq 'Stage' ? $2 : '00-'.$1;
+    }
+    else {
+        warn 'cannot parse stage: '. $text;
+        return 0;
+    }
 }
 
 my %type_map = (
@@ -467,52 +449,70 @@ my %type_map = (
 
 sub fetch_race($self, $event_id) {
     my $race_url = Mojo::URL->new($self->base_url.'/results.php')->query({ mw => 1, y=> $self->year, event => $event_id});
+    say "fetch $race_url";
     my $res = $self->ua->get($race_url)->result;
     die 'Could not fetch race '.$race_url.': '.$res->code
         unless $res->is_success;
-        my $race_info = { year => $self->year };
+        my ($title) = $res->dom->at('h2')->text =~/Results :: (.*)/;
+        my $race_info = { year => $self->year, event_id => $event_id, name => $title };
         $res->dom->find('h2')->first(sub($e) { $e->text =~ /^Results/ })
             ->following('table.noevents')->first->find('tr')->tail(-1)->each(sub ($row, $n) {
                 my $tds = $row->find('td')->to_array;
-                if ($tds->[0]->text eq 'Type') {
+                my $row_info = lc $tds->[0]->text;
+                if ($row_info eq 'type') {
                     $race_info->{type} = $type_map{$tds->[1]->text} //
                         die 'unknown type '.$tds->[1]->text;
                 }
-                elsif($tds->[0]->text eq 'Category') {
+                elsif($row_info eq 'category') {
                     $race_info->{cat} = Mojo::URL->new($tds->[1]->at('a')->attr('href'))->query->param('cat');
                 }
-                elsif($tds->[0]->text eq 'Date' || $tds->[0]->text eq 'First Stage') {
+                elsif($row_info eq 'date' || $row_info eq 'first stage') {
                     $race_info->{start_date} = _parse_race_date($tds->[1]->text);
                 }
-                elsif($tds->[0]->text eq 'Last Stage') {
+                elsif($row_info eq 'last stage') {
                     $race_info->{end_date} = _parse_race_date($tds->[1]->text);
+                }
+                elsif($row_info eq 'country') {
+                    $race_info->{country} = Mojo::URL->new($tds->[1]->at('a')->attr('href'))->query->param('country');
                 }
 
             });
-    $race_info->{end_date} = $race_info->{start_date}
-        if $race_info->{type} eq 'single_day_race';
-        # could parse stage table?
-    return $race_info;
-}
-
-sub parse_stage_table($res) {
-    die 'I do not work yet';
+        if ($race_info->{type} eq 'single_day_race') {
+        $race_info->{end_date} = $race_info->{start_date}
+        }
+        else {
             # must be overview page
-            my $stage_table = $res->dom->find('table.noevents')->to_array->[1];
-            my $stages = [];
+            # stage table is the 2nd one
+                # not a stage table after all?
+                # see https://www.pdcvds.com/results.php?mw=1&y=2024&event=39
+            my $stage_table = $res->dom->find('table.noevents')->to_array->[1] ||
+                die('no stage table? at '.$race_url);
+            $race_info->{stages} = [];
+            my $peek_first = $stage_table->find('tr')->tail(-1)->first;
+            return $race_info if $peek_first->find('th')->first;
+            # no stages?
+            # see https://pdcvds.com/results.php?mw=1&y=2024&event=39
             $stage_table->find('tr')->tail(-1)->each(sub ($row, $n) {
+                my $stage_info = {
+                    event_id => $event_id, year => $self->year,
+                };
                 my $tds = $row->find('td')->to_array;
                 my $stage_link = $tds->[1]->at('a');
+                if ($stage_link) {
+                    $stage_info->{num} = _parse_stage_text($stage_link->text);
+                    $stage_info->{date} = _parse_race_date($tds->[0]->text.', '.$self->year);
+                    $stage_info->{stage_id} = Mojo::URL->new($stage_link->attr('href'))->query->param('race');
+                }
+                else {
                 # only a link when there's a result
-                return unless $stage_link;
+                # no race_id though
+                    $stage_info->{num} = _parse_stage_text($tds->[0]->text);
+                }
 
-                #my $date = _parse_race_date($tds->[0]->text.', '.$self->year);
-                # format is [order].Stage [num]
-                #my ($num, $stage_name) = ($stage_link->text =~ /^(\d+)\. (.+)/);
-                #my $stage_id = Mojo::URL->new($stage_link->attr('href'))->query->param('race');
-
-    });
-    return $stages;
+            push $race_info->{stages}->@*, $stage_info;
+        });
+    }
+    return $race_info;
 }
 
 sub fetch_results($self, $race) {

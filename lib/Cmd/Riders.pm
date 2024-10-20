@@ -13,17 +13,14 @@ option 'pid' => (
     isa => 'Int',
     #required => true,
 );
-option 'all_missing' => (
-    is => 'ro',
-    isa => 'Bool',
-);
 
 option 'full_list' => (
     is => 'ro',
     isa => 'Bool',
 );
 
-my $process_rider  = sub ($self, $info) {
+sub run($self) {
+    my $process = sub ($info) {
         say encode_json($info);
         my $insert_ok = $self->pdc->insert_rider($info);
         if (!$insert_ok) {
@@ -31,19 +28,29 @@ my $process_rider  = sub ($self, $info) {
             return;
         }
         if (defined $info->{uci_team_short}) {
-        $self->pdc->insert_uci_team($info->{uci_team}, $info->{uci_team_short} ,$info->{category}, $self->year);
-        $self->pdc->insert_uci_team_rider($self->year, $info->{pid}, $info->{uci_team_short});
+            $self->pdc->insert_uci_team({
+                name => $info->{uci_team},
+                short => $info->{uci_team_short},
+                cat => $info->{category},
+                year => $self->year,
+            });
+        $self->pdc->link_uci_team_rider($info->{uci_team_short}, $info->{pid}, $self->year);
         }
         else {
             say "rider ".$info->{pid}. ' has no UCI team';
         }
     };
-sub run($self) {
-    my $process = sub($info) { $process_rider->($self, $info )};
     if ($self->full_list) {
-        $self->pdc->fetch_rider_list;
+        my @riders = $self->pdc->fetch_rider_list;
+        for my $rider (@riders) {
+            $self->pdc->insert_rider($rider);
+        $self->pdc->insert_rider_price($rider->{pid}, $rider->{price}, $self->year);
+        }
     }
-    elsif ($self->all_missing) {
+    elsif(defined $self->pid) {
+        $self->pdc->fetch_rider_info($self->pid)->then($process)->wait;
+    } 
+    else {
         my $missing = $self->pdc->db->selectall_arrayref(qq(
             SELECT pid FROM riders 
              WHERE (dob IS NULL 
@@ -58,15 +65,6 @@ sub run($self) {
         my $p = Mojo::Promise->map({ concurrency => 5 }, sub($missing) {
             return $self->pdc->fetch_rider_info($missing->{pid})->then($process);
         }, $missing->@*)->wait;
-
-
-    }
-    elsif(defined $self->pid ) {
-        $self->pdc->fetch_rider_info($self->pid)->then($process)->wait;
-    }
-    else {
-        die 'need pid';
     }
 }
-
 true;
