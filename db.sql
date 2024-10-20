@@ -66,8 +66,8 @@ CREATE TABLE team_riders(
     year integer,
     pid integer not null, 
     uid integer not null,
-    foreign key(pid)references riders(pid), 
-    foreign key (uid) references teams(uid),
+    foreign key(pid) references riders(pid), 
+    foreign key (uid, year) references teams(uid, year),
     primary key(year, pid, uid)
 
 );
