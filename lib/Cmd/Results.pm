@@ -21,33 +21,48 @@ sub run($self) {
             SELECT * FROM races
             WHERE year=? AND (
                 event_id IN (SELECT value FROM json_each(?))
-                OR (? AND NOT EXISTS (
-                    SELECT 1 FROM race_results WHERE races.event_id=race_results.event_id AND race_results.year=races.year)
-                )
+                    OR (? AND (
+                    NOT EXISTS (SELECT 1 FROM race_results WHERE races.event_id=race_results.event_id AND race_results.year=races.year)
+                        OR event_id IN ( SELECT event_id FROM stages WHERE stages.year=races.year AND NOT EXISTS (SELECT 1 FROM race_results rr WHERE rr.stage_id=stages.stage_id AND rr.year=stages.year))
+                        )
+                    )
             )
         }, { Slice => {} }, $self->year, encode_json($self->event_id), scalar($self->event_id->@*) == 0);
         say "missing results for ".scalar($races->@*).' races';
-    for my $race ($races->@*) {
-        say "get result for race ".$race->{name};
-        if ($race->{type} eq 'stage_race') {
-            my $stages = $self->pdc->get_stages($race->{event_id});
+        my @promises;
+        for my $race ($races->@*) {
+            $self->pdc->db->do(q{DELETE FROM race_results WHERE event_id=?}, undef, $race->{event_id});
+            if ($race->{type} eq 'stage_race') {
+                my $stages = $self->pdc->get_stages($race->{event_id});
                 for my $stage ($stages->@*) {
-                    say "get results for stage ".$stage->{num};
-                    my $results = $self->pdc->fetch_results($stage);
-                    for my $result ($results->@*) {
-                        $result->{stage_id} = $stage->{stage_id};
-                        $result->{event_id} = $race->{event_id};
-                        $self->pdc->insert_result($result);
-                    }
+                    push @promises, $self->pdc->fetch_results($stage)->then(sub($results) {
+                        say sprintf('got results for %s stage %s' => $race->{name}, $stage->{num});
+                        for my $result ($results->@*) {
+                            $result->{stage_id} = $stage->{stage_id};
+                            $result->{event_id} = $race->{event_id};
+                            $self->pdc->insert_result($result);
+                        }
+                    });
                 }
             }
             else {
-                my $results = $self->pdc->fetch_results($race);
-                for my $result ($results->@*) {
-                    $result->{event_id} = $race->{event_id};
-                    $self->pdc->insert_result($result);
-                }
+                push @promises, $self->pdc->fetch_results($race)->then(sub($results) {
+                    say sprintf('got results for race %s' => $race->{name});
+                    for my $result ($results->@*) {
+                        $result->{event_id} = $race->{event_id};
+                        $self->pdc->insert_result($result);
+                    }
+                });
             }
-        }
+    }
+    while (my $promise = shift @promises) {
+    say sprintf 'running %s promises' => scalar @promises;
+        $promise->catch( sub($e) {
+            warn 'failed: '.$e;
+            sleep 5;
+            #push @promises, $promise;
+        })->wait
+    }
+    #Mojo::Promise->map({ concurrency => 1}, sub { return $_[0]}, @promises)->wait
 }
 true;

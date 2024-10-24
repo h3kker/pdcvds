@@ -90,5 +90,4 @@ CREATE TABLE race_results(
     foreign key(pid) references riders(pid),
     foreign key(event_id, year) references races(event_id, year),
     foreign key(stage_id, year) references stages(stage_id, year)
-    primary key(type, pos, event_id, stage_id)
 );

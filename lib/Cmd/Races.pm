@@ -48,8 +48,8 @@ sub run($self) {
                     SELECT 1 FROM stages WHERE races.event_id=stages.event_id AND stages.date IS NOT NULL)
                 )))
             )
-        }, { Slice => {} }, $self->year, encode_json($self->event_id), ! scalar($self->event_id->@*)> 0 );
-            # if no event_id defined we fetch all events without results
+        }, { Slice => {} }, $self->year, encode_json($self->event_id), !scalar($self->event_id->@*)> 0 );
+            # if no event_id defined we fetch all events without details or stages
         say "fetch missing info for ".scalar($races->@*).' races';
         for my $race ($races->@*) {
             my $race_info = $self->pdc->fetch_race($race->{event_id});
