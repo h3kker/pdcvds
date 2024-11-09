@@ -31,7 +31,7 @@ sub run($self) {
         say "missing results for ".scalar($races->@*).' races';
         my @promises;
         for my $race ($races->@*) {
-            $self->pdc->db->do(q{DELETE FROM race_results WHERE event_id=?}, undef, $race->{event_id});
+            $self->pdc->db->do(q{DELETE FROM race_results WHERE event_id=? AND year=?}, undef, $race->{event_id}, $self->year);
             if ($race->{type} eq 'stage_race') {
                 my $stages = $self->pdc->get_stages($race->{event_id});
                 for my $stage ($stages->@*) {
@@ -55,11 +55,11 @@ sub run($self) {
                 });
             }
     }
-    while (my $promise = shift @promises) {
     say sprintf 'running %s promises' => scalar @promises;
+    for my $promise (@promises) {
         $promise->catch( sub($e) {
             warn 'failed: '.$e;
-            sleep 5;
+            #sleep 5;
             #push @promises, $promise;
         })->wait
     }
