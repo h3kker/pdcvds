@@ -45,7 +45,7 @@ sub run($self) {
                 OR (? AND (
                     type IS NULL OR start_date IS NULL OR (
                     type = 'stage_race' AND NOT EXISTS (
-                    SELECT 1 FROM stages WHERE races.event_id=stages.event_id AND stages.date IS NOT NULL)
+                    SELECT 1 FROM stages WHERE races.event_id=stages.event_id AND stages.year=races.year AND stages.date IS NOT NULL)
                 )))
             )
         }, { Slice => {} }, $self->year, encode_json($self->event_id), !scalar($self->event_id->@*)> 0 );

@@ -66,6 +66,10 @@ sub insert_race($self, $race) {
 }
 
 sub insert_stage($self, $stage) {
+    unless ($stage->{stage_id}) {
+        say "skip, no id";
+        return;
+    }
     my @cols = qw(event_id stage_id num year date);
     $self->_gen_insert('stages', \@cols, $stage);
 }
@@ -246,7 +250,7 @@ sub fetch_rider_info($self, $pid, $year=$self->year) {
                         if $team_short;
                 }
                 elsif($cols->[0]->text eq 'Birthday' && $cols->[1]->text) {
-                    $info->{dob} = $birthday_parser->parse_datetime($cols->[1]->text)->iso8601;
+                    $info->{dob} = $birthday_parser->parse_datetime($cols->[1]->text)->ymd('-');
                 }
                 elsif($cols->[0]->text eq 'UCI Category') {
                     $info->{category} = $cols->[1]->text;
@@ -506,7 +510,7 @@ sub fetch_race($self, $event_id) {
                 else {
                 # only a link when there's a result
                 # no race_id though
-                    $stage_info->{num} = _parse_stage_text($tds->[0]->text);
+                    $stage_info->{num} = _parse_stage_text($tds->[1]->text);
                 }
 
             push $race_info->{stages}->@*, $stage_info;
@@ -517,15 +521,20 @@ sub fetch_race($self, $event_id) {
 
 sub fetch_results($self, $race) {
     my $_do_fetch = sub($url) {
-        my $res = $self->ua->get($url)->result;
-        die 'Could not fetch results '.$url.': '.$res->code
-            unless $res->is_success;
-        return $res;
+        return $self->ua->get_p($url)->then(sub($tx) {
+            my $res = $tx->result;
+            die sprintf('Could not fetch results from %s %s: %s' => $url, $res->code, $res->message)
+                unless $res->is_success;
+            return $res;
+
+        })->catch(sub($ex) {
+            die 'fetch fail '.$ex;
+        });
     };
     my $parse_result_row = sub($row, $type) {
         my $tds = $row->find('td')->to_array;
         die 'no td? in '.$row
-        unless $tds->@*;
+            unless $tds->@*;
         my $pos = $tds->[0]->text;
         $pos =~ tr/\. //d;
         return {
@@ -540,48 +549,49 @@ sub fetch_results($self, $race) {
     my $url = Mojo::URL->new($self->base_url.'/results.php')->query({ mw => 1, y=> $self->year});
     if ($race->{stage_id}) {
         $url->query->merge(race => $race->{stage_id});
-        my $res = $_do_fetch->($url);
-        my $head = $res->dom->find('h3')->first(sub($e) { $e->text =~ /^Stage/ });
-        die 'no results at '.$url
-            unless $head;
-        my $state = 'stage';
+        return $_do_fetch->($url)->then(sub($res) {
+            my $head = $res->dom->find('h3')->first(sub($e) { $e->text =~ /^Stage/ });
+            die 'no results at '.$url
+                unless $head;
+            my $state = 'stage';
         my $results = [];
-        $head->following('table.noevents')->first->find('tr')->each(sub($row, $n) {
-            my $heads = $row->find('th')->to_array;
-            if (scalar $heads->@* == 2) {
-                if ($heads->[1]->text =~ /^Placing/) {
-                    $state = 'stage';
-                }
-                elsif ($heads->[1]->text =~ /^Intermediate/) {
-                    $state = 'jersey';
-                }
-                elsif ($heads->[1]->text =~ /Final leader/) {
-                    $state = 'gc';
-                }
-                elsif ($heads->[1]->text =~ /Final .* jersey/) {
-                    $state = 'jersey';
+            $head->following('table.noevents')->first->find('tr')->each(sub($row, $n) {
+                my $heads = $row->find('th')->to_array;
+                if (scalar $heads->@* == 2) {
+                    if ($heads->[1]->text =~ /^Placing/) {
+                        $state = 'stage';
+                    }
+                    elsif ($heads->[1]->text =~ /^Intermediate/) {
+                        $state = 'jersey';
+                    }
+                    elsif ($heads->[1]->text =~ /Final leader/) {
+                        $state = 'gc';
+                    }
+                    elsif ($heads->[1]->text =~ /Final .* jersey/) {
+                        $state = 'jersey';
+                    }
+                    else {
+                        die 'Unexpected: '.$heads->[1]->text.' on '.$url;
+                    }
                 }
                 else {
-                    die 'Unexpected: '.$heads->[1]->text.' on '.$url;
+                return unless $row->find('td')->size > 1;
+                    push $results->@*, $parse_result_row->($row, $state)
                 }
-            }
-            else {
-                return 
-                    if (($row->attr('class')//'') eq 'lite') || $row->find('td')->size <= 1;
-                push $results->@*, $parse_result_row->($row, $state);   
-            }
+            });
+        return $results;
         });
-    return $results;
     }
     elsif ($race->{event_id}) {
         $url->query->merge(event => $race->{event_id});
-        my $res = $_do_fetch->($url);
-        my $results_table = $res->dom->find('h3')->first(sub($e) { $e->text eq 'Results'})->following('table.noevents')->first;
-        die 'no result for '.$url
-            unless $results_table;
-        return $results_table->find('tr')->tail(-1)->head(-1)->map(sub ($row) {
+        return $_do_fetch->($url)->then(sub($res) {
+            my $results_table = $res->dom->find('h3')->first(sub($e) { $e->text eq 'Results'})->following('table.noevents')->first;
+            die 'no result for '.$url
+                unless $results_table;
+            return $results_table->find('tr')->tail(-1)->head(-1)->map(sub ($row) {
                 $parse_result_row->($row, 'single_day_race');
             })->to_array;
+        });
     }
     else {
         die 'need stage_id or event_id';
