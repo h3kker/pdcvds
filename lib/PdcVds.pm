@@ -277,8 +277,13 @@ sub get_stages($self, $event_id, $year=$self->year) {
 sub get_team($self, $uid, $year=$self->year) {
     $self->db->selectrow_hashref(q{
     SELECT *, (
-        SELECT count(*) FROM team_riders WHERE team_riders.uid=teams.uid 
+        SELECT count(*) FROM team_riders WHERE team_riders.uid=teams.uid AND team_riders.year=teams.year
         ) rider_count FROM teams WHERE uid=? AND year=?}, undef, $uid, $year);
+}
+
+sub remove_team_riders($self, $uid, $year=$self->year) {
+    $self->db->do(q{
+    DELETE FROM team_riders WHERE uid=? AND year=? }, undef, $uid, $year);
 }
 
 sub link_team_rider($self, $uid, $pid, $year=$self->year) {
