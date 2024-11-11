@@ -16,22 +16,6 @@ stages <- as_tibble(tbl(pdc_db, "stages")) %>%
 race_results <- as_tibble(tbl(pdc_db, "race_results"))
 riders_seen <- as_tibble(tbl(pdc_db, "riders_seen"))
 riders_prices <- as_tibble(tbl(pdc_db, "rider_prices"))
-
-cur_riders <- riders %>%
-  inner_join(riders_seen %>% filter(year == cur_year))
-
-
-cur_year <- year(now())
-my_team <- teams %>% filter(year == cur_year, mine) %>% pull(uid)
-
-my_riders <- teams %>%
-  filter(year == cur_year & mine) %>%
-  select(-name) %>%
-  inner_join(team_riders) %>%
-  inner_join(riders, by = join_by(pid)) %>%
-  inner_join(riders_prices) %>%
-  select(-mine, -starts_with("spec_"))
-
 # add result date from stage/race
 race_results <- race_results %>%
   left_join(stages) %>%

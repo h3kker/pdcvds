@@ -17,7 +17,18 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```
 
 ```{r load}
+cur_year <- 2024
 source("load.R")
+my_team <- teams %>% filter(year == cur_year, mine) %>% pull(uid)
+my_riders <- teams %>%
+  filter(year == cur_year & mine) %>%
+  select(-name) %>%
+  inner_join(team_riders) %>%
+  inner_join(riders, by = join_by(pid)) %>%
+  inner_join(riders_prices) %>%
+  select(-mine, -starts_with("spec_"))
+
+
 
 ```
 

@@ -12,8 +12,6 @@ library(ggplot2)
 library(DT)
 library(tidyr)
 theme_set(theme_bw())
-source("_funcs.R")
-
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 
 member_highlight_table <- function(dd) {
@@ -21,7 +19,7 @@ member_highlight_table <- function(dd) {
     pivot_wider(names_from = year, names_prefix = "t",
         values_from = year, values_fill = 0) %>%
     mutate(across(starts_with("t"), ~ . > 0)) %>%
-    arrange(name) %>%
+    arrange(rider_name) %>%
     datatable(
         options = list(
             pageLength = 100,
@@ -48,218 +46,116 @@ member_highlight_table <- function(dd) {
         backgroundColor = styleEqual(c(FALSE, TRUE), c("none", "lightyellow"))
 )}
 ```
-
 ```{r load}
-all_teams <- bind_rows(lapply(seq(2019, 2024), function(year) {
-    team <- load_team(paste("../data/team-", year, ".json", sep = ""))
-    team$riders <- team$riders %>%
-        mutate(year = year) %>%
-        arrange(desc(score), price) %>%
-        mutate(rank = row_number())
-    team$riders
-}))
+source("load.R")
 
-all_races <- load_races()
+all_my_teams <- teams %>%
+  filter(mine) %>%
+  inner_join(team_riders) %>%
+  inner_join(riders, by = join_by(pid)) %>%
+  inner_join(riders_prices) %>%
+  rename(rider_name = name.y)
 
-hist_str <- fromJSON("../data/history.json", simplifyDataFrame = FALSE)
-rider_seasons <- bind_rows(lapply(hist_str, function(hh) {
-    bind_cols(name = hh$name, pid = hh$pid, 
-        bind_rows(lapply(hh$seasons, bind_cols)))
-}))
-all_results <- bind_rows(lapply(hist_str, function(hh) {
-    lapply(hh$results, bind_cols)
-}))
-season_results <- all_results %>% filter(year(date) == "2024")
+#rider_prices_w <- riders_prices %>%
+#  pivot_wider(id_cols=pid, values_from=price, names_from=year)
+rider_scores_w <- race_results %>%
+  group_by(pid, year) %>%
+  summarise(score = sum(points)) %>%
+  pivot_wider(id_cols=pid, names_from = year, values_from = score)
 ```
 
-## Total Score over Year
-
 ```{r score_over_year, fig.width=10}
-all_results %>%
-    mutate(season = year(date), doy = yday(date)) %>%
-    inner_join(all_teams %>% select(pid, season = year), multiple = "all", relationship="many-to-many") %>%
-    group_by(season) %>%
-    arrange(doy) %>%
-    mutate(cumpoints = cumsum(points)) %>%
-    ggplot(aes(x = doy, y = cumpoints, color = factor(season))) +
-    geom_step(aes(size = season == year(today()))) +
-    scale_color_brewer(type = "qual", palette = "Set1") +
-    scale_size_manual(values = c(`FALSE` = .75, `TRUE` = 3), guide = "none")
+race_results %>%
+  mutate(doy = yday(date)) %>%
+inner_join(all_my_teams) %>%
+group_by(year) %>%
+arrange(doy) %>%
+mutate(cumpoints=cumsum(points)) %>%
+ggplot(aes(x = doy, y = cumpoints, color = factor(year))) +
+geom_step(aes(linewidth = year == year(today()))) +
+scale_color_brewer(type="qual", palette = "Set1") +
+scale_linewidth_manual(values=c(`FALSE` = .75, `TRUE` = 3), guide = "none")
+
+
+race_results %>%
+  mutate(doy = yday(date)) %>%
+  group_by(year, doy, pid) %>%
+  summarise(points=sum(points)) %>%
+  inner_join(all_my_teams) %>%
+  group_by(year) %>%
+  arrange(doy) %>%
+  mutate(cumpoints = cumsum(points)) %>%
+  filter(year == 2020) %>%
+  View()
+ggplot(aes(x = doy, y = cumpoints, color = factor(year))) +
+geom_step(aes(linewidth = year == year(today()))) +
+scale_color_brewer(type="qual", palette = "Set1") +
+scale_linewidth_manual(values=c(`FALSE` = .75, `TRUE`= 3), guide = "none")
 ```
 
 ## Members
 
+
 ```{r team_members, fig.height=9}
-all_teams %>%
-    ggplot(aes(x = year, y = name)) +
-    geom_point(aes(alpha = price, size = score))
+all_my_teams %>%
+  inner_join(race_results) %>%
+  group_by(year, rider_name, pid, price) %>%
+  summarise(score = sum(points)) %>%
+  ggplot(aes(x = year, y = rider_name)) +
+  geom_point(aes(size = score, color = price)) +
+  scale_color_viridis_c(option = "G", direction = -1)
 ```
 
 ## Rank History
-
 ```{r pos_history}
-tmp_common <- all_teams %>%
-    inner_join(all_teams %>% count(name) %>% filter(n > 1))
+tmp_common <- all_my_teams %>%
+  count(pid) %>%
+  filter(n > 1) %>%
+  inner_join(all_my_teams)
 
-tmp_common %>%
-    select(name, year, rank) %>%
+rider_ranks <- riders %>%
+  inner_join(race_results, by=join_by(pid)) %>%
+  group_by(pid, year) %>%
+  summarise(score = sum(points)) %>%
+  arrange(desc(score)) %>%
+  group_by(year) %>%
+  mutate(rank = row_number())
+
+  tmp_common %>%
+    inner_join(rider_ranks) %>%
+    select(rider_name, year, rank) %>%
     pivot_wider(names_from = year, values_from = rank) %>%
     datatable(
-        options = list(
-            pageLength = 50,
-            dom = "ft"
-        )
+      options = list(
+        pageLength = 50,
+        dom = "ft"
+      )
     )
 ```
-
 ## Rider Points per Season
 
-```{r year_scores, fig.height=9}
-all_results %>%
-    group_by(pid, season = year(date)) %>%
-    summarise(points = sum(points)) %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    ggplot(aes(x = season, y = points, group = name)) +
-    geom_line() +
-    geom_point(aes(color = season == year)) +
-    facet_wrap(~year) +
-    theme(legend.position = "none")
-```
+```{r year_scores, fig.height=5}
 
+race_results %>%
+  group_by(pid, season = year) %>%
+    summarise(points=sum(points)) %>%
+    inner_join(all_my_teams, relationship = "many-to-many") %>%
+    select(pid, rider_name, year, season, points) %>%
+    ggplot(aes(x = season, y = points, group = rider_name)) +
+      geom_line() +
+      geom_point(aes(color = season == year)) +
+      facet_wrap(~year) +
+      theme(legend.position="none")
+
+```
 ```{r year_scores_table}
-all_results %>%
-    group_by(pid, season = year(date)) %>%
+race_results %>%
+    group_by(pid, season = year) %>%
     summarise(points = sum(points)) %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    ungroup() %>%
-    select(name, year, season, points) %>%
+    inner_join(all_my_teams %>%
+      select(pid, rider_name, year), relationship = "many-to-many") %>%
+  ungroup() %>%
+    select(rider_name, year, season, points) %>%
     pivot_wider(names_from = season, values_from = points) %>%
     member_highlight_table()
-```
-
-## Team Total per Season
-
-```{r year_totals}
-all_results %>%
-    group_by(pid, season = year(date)) %>%
-    summarise(points = sum(points)) %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    group_by(season, year) %>%
-    summarise(points = sum(points)) %>%
-    ggplot(aes(x = season, y = points, color = factor(year))) +
-        geom_line()
-```
-
-```{r year_totals_table}
-all_results %>%
-    group_by(pid, season = year(date)) %>%
-    summarise(points = sum(points)) %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    group_by(season, year) %>%
-    summarise(points = sum(points)) %>%
-    rename(team = year) %>%
-    pivot_wider(names_from = season, values_from = points) %>%
-    datatable(
-        options = list(
-            pageLength = 50,
-            dom = "ft"
-        )
-    )
-```
-
-## Rider Popularity
-
-```{r popularity_table}
-rider_seasons %>%
-    select(name, year, teams) %>%
-    pivot_wider(names_from = year, values_from = teams) %>%
-    inner_join(all_teams %>% select(name, year), multiple = "all") %>%
-    member_highlight_table()
-```
-
-## Rider Points This Season
-
-```{r season_table}
-season_results %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    group_by(name, year) %>%
-    summarise(points = sum(points)) %>%
-    pivot_wider(names_from = year, values_from = points, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2024`)) %>%
-    datatable(options = list(
-        pageLength = 50,
-        columnDefs = list(list(targets = "has_current", visible = FALSE))
-    )) %>%
-    formatStyle("has_current",
-        target = "row",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c(NA, "lightyellow")))
-
-```
-
-## Races this Season
-
-### Points
-
-```{r season_race_table}
-season_results %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    group_by(race, year) %>%
-    summarise(points = sum(points)) %>%
-    inner_join(season_results %>%
-        group_by(race) %>%
-        summarise(date = strftime(min(date), "%Y-%m-%d"))) %>%
-    arrange(date, race) %>%
-    pivot_wider(names_from = year, values_from = points, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2024`)) %>%
-    datatable(options = list(
-        pageLength = 25,
-        columnDefs = list(list(targets = "has_current", visible = FALSE))
-    )) %>%
-    formatStyle("has_current",
-        target = "row",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c(NA, "lightyellow")))
-
-```
-
-```{r season_points_table}
-season_results %>%
-    inner_join(all_teams %>% select(pid, name, year), multiple = "all", relationship="many-to-many") %>%
-    group_by(race, name, year) %>%
-    summarise(points = sum(points)) %>%
-    inner_join(season_results %>%
-        group_by(race) %>%
-        summarise(date = strftime(min(date), "%Y-%m-%d"))) %>%
-    arrange(date, race, name) %>%
-    pivot_wider(names_from = year, values_from = points, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2024`)) %>%
-    datatable(options = list(
-        pageLength = 25,
-        columnDefs = list(list(targets = "has_current", visible = FALSE))
-    )) %>%
-    formatStyle("has_current",
-        target = "row",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c(NA, "lightyellow")))
-
-```
-
-### Positions
-
-```{r season_pos_table}
-all_races$results %>%
-    filter(rank <= if_else(type == "stage", 3, 15) &
-        start_date >= "2023-02-20") %>%
-    inner_join(all_teams, by = c("name"), multiple="all", relationship="many-to-many") %>%
-    mutate(race_date=coalesce(stage_date,
-            if_else(type == "gc", end_date, start_date))) %>%
-    select(race_date, race, type, stage, rank = rank.x, name, year)  %>%
-    arrange(desc(race_date), race, type, rank) %>%
-    pivot_wider(names_from = year, values_from = rank, names_sort = TRUE) %>%
-    mutate(has_current = !is.na(`2024`)) %>%
-    datatable(options = list(
-        pageLength = 25,
-        columnDefs = list(list(targets = "has_current", visible = FALSE))
-    )) %>%
-    formatStyle("has_current",
-        target = "row",
-        backgroundColor = styleEqual(c(FALSE, TRUE), c(NA, "lightyellow")))
 ```
