@@ -22,7 +22,7 @@ sub run($self) {
     $teams = [ grep {
         $self->pdc->insert_team($_);
         my $have_team = $self->pdc->get_team($_->{uid});
-        my $want= $have_team->{rider_count} == 0 || $self->refresh;
+        my $want= $have_team->{rider_count} !=25 || $self->refresh;
         if ($have_team->{rider_count}) {
             say "already here, with ".$have_team->{rider_count}." riders.";
         }
@@ -35,6 +35,10 @@ sub run($self) {
         return $self->pdc->fetch_riders_for_team($team->{uid})->then(sub($riders) {
             my %riders;
             say " got ".scalar $riders->@*." riders";
+            unless (scalar $riders->@* == 25) {
+                die 'need exactly 25 riders!';
+            }
+            $self->pdc->remove_team_riders($team->{uid}, $self->year);
             for my $pid ($riders->@*) {
                 my $rider = $riders{$pid};
                 unless ($rider) {
