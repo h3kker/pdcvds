@@ -73,7 +73,6 @@ sub _indices($tbl) {
 }
 
 sub upcoming($self) {
-    say "fetch upcoming";
     my $next_week = DateTime->now->add(weeks => 2);
     
     my $res = $self->ua->get($self->base_url.'/races.php?popular=pro_me&s=upcoming-races')->result;
@@ -210,7 +209,6 @@ sub start_list($self, $race_url) {
     $start_url =~ s,/overview$,,;
     $start_url .= '/startlist';
     my $res = $self->ua->get($start_url.'/top-competitors')->result;
-    say $start_url.'/top-competitors';
     die 'Unable to fetch: '.$res->code 
         unless $res->is_success;
     my $tbl = $res->dom->at('div.content table.basic');
