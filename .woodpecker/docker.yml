@@ -15,14 +15,10 @@ steps:
     --label at.ac.vcf.ngs.blame="$DRONE_COMMIT_AUTHOR"
     -t ghcr.io/h3kker/pdcvds .
 - name: pushraus
+  image: plugins/docker
+
+- name: pushraus
   image: docker
+  repo: repo.testha.se/pdcvs
   depends_on:
   - bauhaus
-  volumes:
-  - /var/run/docker.sock:/var/run/docker.sock
-  environment:
-    DOCKER_PASS:
-      from_secret: pkg push
-  commands:
-    - echo "$DOCKER_PASS" | docker login --username hekker --password-stdin ghcr.io
-    - docker push ghcr.io/h3kker/pdcvds
