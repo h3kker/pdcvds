@@ -8,5 +8,6 @@ steps:
       password:
         from_secret: pkg push
       username: hekker
-      tag: latest
+      tags: 
+      - latest
       registry: repo.testha.se
