@@ -1,0 +1,28 @@
+when:
+  - event: push
+    branch: [master,sqlize]
+steps:
+- name: bauhaus
+  image: docker
+  volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  commands:
+  - >
+    docker build
+    --label org.label-schema.build-date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+    --label org.label-schema.vcs-url="$DRONE_GIT_HTTP_URL"
+    --label org.label-schema.vcs-ref="$DRONE_COMMIT_SHA"
+    --label at.ac.vcf.ngs.blame="$DRONE_COMMIT_AUTHOR"
+    -t ghcr.io/h3kker/pdcvds .
+- name: pushraus
+  image: docker
+  depends_on:
+  - bauhaus
+  volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  environment:
+    DOCKER_PASS:
+      from_secret: pkg push
+  commands:
+    - echo "$DOCKER_PASS" | docker login --username hekker --password-stdin ghcr.io
+    - docker push ghcr.io/h3kker/pdcvds
