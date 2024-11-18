@@ -6,6 +6,7 @@ steps:
   image: woodpeckerci/plugin-docker-buildx
   settings:
       auto_tag: true
+      purge: false
       repo: repo.testha.se/hekker/pdcvds
       tags: latest
       password:
