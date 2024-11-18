@@ -6,6 +6,7 @@ steps:
   image: woodpeckerci/plugin-docker-buildx
   settings:
       auto_tag: true
+      tags_file: .tags
       password:
         from_secret: pkg push
       username: hekker
