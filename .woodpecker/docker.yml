@@ -5,8 +5,8 @@ steps:
 - name: bauhaus
   image: woodpeckerci/plugin-docker-buildx
   settings:
+      auto_tag: true
       password:
         from_secret: pkg push
       username: hekker
-      tags: oink
       registry: repo.testha.se
