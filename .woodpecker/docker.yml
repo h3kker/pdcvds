@@ -3,10 +3,11 @@ when:
     branch: [master,sqlize]
 steps:
 - name: bauhaus
+  privileged: true
   image: woodpeckerci/plugin-docker-buildx
   settings:
       auto_tag: true
-      tags: latest
+      tag: latest
       password:
         from_secret: pkg push
       username: hekker

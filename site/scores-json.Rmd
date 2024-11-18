@@ -1,0 +1,193 @@
+---
+title: VDS Scores
+date: "`r format(Sys.time())`"
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+
+
+library(jsonlite)
+library(lubridate)
+library(knitr)
+library(ggplot2)
+library(DT)
+library(tidyr)
+theme_set(theme_bw())
+source("_funcs.R")
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r load}
+team <- load_team("../data/team-2024.json")
+all_races <- load_races()
+```
+
+## Rider Scores
+
+```{r current_table}
+racedays <- team$riders %>%
+    left_join(all_races$results %>%
+        filter(
+            start_date >= "2023-02-20" &
+            type != "gc"
+        ), by = c("name")) %>%
+    group_by(name) %>%
+    summarise(race_days = sum(!is.na(race)))
+
+team$riders %>%
+    inner_join(racedays) %>%
+    select(name, country, team, cat, age, price, race_days, score) %>%
+    arrange(desc(score), desc(race_days)) %>%
+    datatable(
+        options = list(
+            pageLength = 25,
+            dom = "ft"
+        )
+    )
+```
+
+### Cumulative Score
+
+```{r score_dev, fig.width=14, fig.height=9}
+tmp_cumtable <- team$results %>%
+    left_join(
+        team$riders %>% select(pid, name)
+    ) %>%
+    group_by(name) %>%
+    arrange(date) %>%
+    mutate(score = cumsum(points))
+
+tmp_lastscore <- tmp_cumtable %>%
+    group_by(name) %>%
+    slice_max(n = 1, order_by = date) %>%
+    mutate(date = now())
+
+tmp_init <- tmp_cumtable %>%
+    group_by(name) %>%
+    summarise(
+        date = ymd_hms("2023-02-20 00:00:00"),
+        score = 0
+    )
+
+
+bind_rows(tmp_init, tmp_cumtable, tmp_lastscore) %>%
+    ggplot(aes(x = date, y = score)) +
+        geom_step(aes(color = name)) +
+        geom_point() +
+        geom_label(data = tmp_lastscore,
+            aes(x = date, y = score, label = name),
+            hjust = "right") +
+        theme(legend.position = "none")
+```
+
+## Team Ranking
+
+```{r ranking}
+team$standings %>%
+    arrange(desc(date)) %>%
+    head(1) %>%
+    kable()
+```
+
+```{r ranking_hist, fig.width=14}
+team$standings %>%
+    ggplot(aes(x = date, y = position)) +
+    geom_step() +
+    ylim(813, 0)
+```
+
+## Race Scores
+
+### Latest Scores
+
+```{r latest_races}
+team$results %>%
+    filter(date > today() - weeks(1)) %>%
+    inner_join(team$riders %>%
+        select(name, pid)) %>%
+    replace_na(list(stage = "")) %>%
+    mutate(race = str_trim(paste(race, stage))) %>%
+    select(date, race, name, points) %>%
+    arrange(desc(date), race, desc(points)) %>%
+    kable()
+```
+
+### Best Races
+
+```{r race_table}
+team$results %>%
+    group_by(race) %>%
+    summarise(date = min(date), score = sum(points), count = n()) %>%
+    arrange(desc(score)) %>%
+    kable()
+```
+
+### Cumulative Score
+
+```{r race_cumsum, fig.width=14, fig.height=9}
+team$results %>%
+    group_by(race) %>%
+    summarise(date = min(date), score = sum(points), count = n()) %>%
+    arrange(date) %>%
+    mutate(score = cumsum(score)) %>%
+    ggplot(aes(x = date, y = score)) +
+        geom_step() +
+        geom_point(aes(size = count)) +
+        geom_label(aes(label = race), hjust = "right", nudge_x = -10000)
+```
+
+## All Race Results
+
+```{r all_results, fig.height=10}
+inner_join(
+        team$riders,
+        all_races$results %>% filter(start_date >= "2023-02-20" & !is.na(rank)),
+        by = c("name"), multiple = "all") %>%
+    left_join(
+        team$results %>% select(pcs_race, stage, pid, points),
+        by = c(race = "pcs_race", pid = "pid", stage = "stage")
+    ) %>%
+    replace_na(list(points = 0)) %>%
+    mutate(
+        race_date = coalesce(stage_date,
+            if_else(type == "gc", end_date, start_date))
+    ) %>%
+    ggplot(aes(x = race_date, y = rank)) +
+    geom_point(aes(color = type, size = points)) +
+    facet_wrap(~name, ncol = 3) +
+    scale_size_binned(range = c(0.1, 6), n.breaks=10)
+```
+
+## PCS Rider Specialties
+
+```{r specialties}
+tmp_specs <- team$specialties %>%
+    rename(OneDay = "Onedayraces", TT = "TT") %>%
+    rowwise() %>%
+    mutate(sum = sum(Climber, GC, Sprint, TT, OneDay)) %>%
+    mutate(across(Climber:TT, ~ . / sum))
+
+team$riders %>%
+    select(pid, name, price, spec) %>%
+    mutate(spec =
+        if_else(spec == "Onedayraces", "OneDay",
+        if_else(spec == "TT", "TT", spec))
+    ) %>%
+    full_join(tmp_specs) %>%
+    arrange(desc(price)) %>%
+    select(-pid, sum) %>%
+    datatable(
+        options = list(
+            pageLength = 25,
+            dom = "ft"
+        )
+    ) %>%
+    formatPercentage(4:8, digits = 0) %>%
+    formatStyle(4:8, 
+        background = styleColorBar(c(0, 1), "lightblue"),
+        backgroundSize = "98% 88%",
+        backgroundRepeat = "no-repeat",
+        backgroundPosition = "center")
+```
